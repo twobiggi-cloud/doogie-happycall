@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>두기 해피콜</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+
+<div id="loading" class="page"><div class="empty">불러오는 중…</div></div>
+
+<div id="login-screen" class="page" hidden>
+  <div class="login-card">
+    <div class="brand-mark">🌿</div>
+    <h1>두기 해피콜</h1>
+    <p>허용된 이메일로 로그인 링크를 받으세요.</p>
+    <form id="login-form">
+      <input type="email" id="login-email" class="search-input" placeholder="이메일" autocomplete="email" required>
+      <button type="submit" class="btn btn-primary">로그인 링크 받기</button>
+    </form>
+    <p id="login-message" class="login-message"></p>
+  </div>
+</div>
+
+<div id="app" class="page" hidden>
+  <div class="app-header">
+    <div class="brand">
+      <div class="brand-mark">🌿</div>
+      <div>
+        <h1>두기 해피콜</h1>
+        <p>처방 한 건마다 약이 떨어지기 전에 콜이 잡혀요</p>
+      </div>
+    </div>
+    <div class="header-actions">
+      <button class="btn btn-primary" id="btn-open-register">+ 처방 등록</button>
+      <button class="btn btn-ghost btn-sm" id="btn-sign-out">로그아웃</button>
+    </div>
+  </div>
+
+  <div class="stats">
+    <div class="stat-tile warn"><div class="num mono" id="stat-escalation">0</div><div class="lbl">원장 전달 필요</div></div>
+    <div class="stat-tile"><div class="num mono" id="stat-today">0</div><div class="lbl">오늘 콜</div></div>
+    <div class="stat-tile upcoming"><div class="num mono" id="stat-visit">0</div><div class="lbl">내원 예약 필요</div></div>
+    <div class="stat-tile"><div class="num mono" id="stat-active">0</div><div class="lbl">진행 중 처방</div></div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab-btn" data-tab="escalation">원장 전달 필요 <span class="count" id="tab-count-escalation">0</span></button>
+    <button class="tab-btn active" data-tab="today">오늘 콜 <span class="count" id="tab-count-today">0</span></button>
+    <button class="tab-btn" data-tab="visit">내원 예약 필요 <span class="count" id="tab-count-visit">0</span></button>
+    <button class="tab-btn" data-tab="all">전체 환자 <span class="count" id="tab-count-all">0</span></button>
+    <button class="tab-btn" data-tab="scripts">스크립트</button>
+  </div>
+
+  <div class="panel" id="panel-escalation" hidden></div>
+  <div class="panel" id="panel-today"></div>
+  <div class="panel" id="panel-visit" hidden></div>
+  <div class="panel" id="panel-all" hidden></div>
+  <div class="panel" id="panel-scripts" hidden></div>
+
+  <div class="footer-note">예시 환자로 검증 중입니다. 실제 진료 판단은 원장님 확인을 거쳐주세요.</div>
+</div>
+
+<div id="modal-root"></div>
+<div id="toast" class="toast"></div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

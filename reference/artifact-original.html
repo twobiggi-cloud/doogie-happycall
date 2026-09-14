@@ -1,0 +1,940 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1"><style>:root{color-scheme:light}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found]){display:none!important}</style></head><body>
+<title>두기 해피콜</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap">
+<style>
+  :root{
+    --bg:#F2F6F1;
+    --surface:#FFFFFF;
+    --surface-alt:#E9F0E6;
+    --border:#D6E1D2;
+    --border-strong:#BFCFB9;
+    --text:#1A2420;
+    --text-muted:#5C6B60;
+    --text-faint:#8B978C;
+    --accent:#1F6F5C;
+    --accent-strong:#154F42;
+    --accent-soft:#DCEEE7;
+    --accent-contrast:#FFFFFF;
+    --info:#3D6EA6;
+    --info-soft:#E1EAF5;
+    --warn:#C97A2B;
+    --warn-soft:#FBEAD3;
+    --danger:#B8433A;
+    --danger-soft:#F8E0DD;
+    --success:#2F8F5B;
+    --success-soft:#E1F1E7;
+    --neutral-soft:#EAEDE8;
+    --shadow: 0 1px 2px rgba(20,30,24,0.04), 0 6px 20px rgba(20,30,24,0.06);
+    --sans: 'Noto Sans KR', 'Apple SD Gothic Neo', system-ui, sans-serif;
+    --mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', monospace;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#111815;
+      --surface:#1A2320;
+      --surface-alt:#202B26;
+      --border:#2E3A34;
+      --border-strong:#3C4A43;
+      --text:#E7EDE9;
+      --text-muted:#9DAAA2;
+      --text-faint:#6E7C74;
+      --accent:#54C6A4;
+      --accent-strong:#7ADCC0;
+      --accent-soft:#1D3A32;
+      --accent-contrast:#08130F;
+      --info:#8FB4E0;
+      --info-soft:#1E2C3D;
+      --warn:#E3A055;
+      --warn-soft:#3B2A16;
+      --danger:#E2695E;
+      --danger-soft:#3B211E;
+      --success:#67CD93;
+      --success-soft:#1B3324;
+      --neutral-soft:#232D28;
+      --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 6px 20px rgba(0,0,0,0.35);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#111815;
+    --surface:#1A2320;
+    --surface-alt:#202B26;
+    --border:#2E3A34;
+    --border-strong:#3C4A43;
+    --text:#E7EDE9;
+    --text-muted:#9DAAA2;
+    --text-faint:#6E7C74;
+    --accent:#54C6A4;
+    --accent-strong:#7ADCC0;
+    --accent-soft:#1D3A32;
+    --accent-contrast:#08130F;
+    --info:#8FB4E0;
+    --info-soft:#1E2C3D;
+    --warn:#E3A055;
+    --warn-soft:#3B2A16;
+    --danger:#E2695E;
+    --danger-soft:#3B211E;
+    --success:#67CD93;
+    --success-soft:#1B3324;
+    --neutral-soft:#232D28;
+    --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 6px 20px rgba(0,0,0,0.35);
+    color-scheme: dark;
+  }
+
+  *{box-sizing:border-box;}
+  body{background:var(--bg); color:var(--text); font-family:var(--sans); line-height:1.5;}
+  h1,h2,h3{font-family:var(--sans); text-wrap:balance; margin:0;}
+  button{font-family:inherit; cursor:pointer;}
+  input,select,textarea{font-family:inherit; font-size:14px;}
+  .mono{font-family:var(--mono); font-variant-numeric:tabular-nums;}
+
+  .page{max-width:1080px; margin:0 auto; padding:28px 20px 80px;}
+
+  .app-header{display:flex; justify-content:space-between; align-items:flex-start; gap:16px; margin-bottom:22px; flex-wrap:wrap;}
+  .app-header .brand{display:flex; gap:12px; align-items:center;}
+  .brand-mark{width:44px; height:44px; border-radius:12px; background:var(--accent); color:var(--accent-contrast); display:flex; align-items:center; justify-content:center; font-size:20px; flex-shrink:0;}
+  .app-header h1{font-size:22px; font-weight:800; letter-spacing:-0.01em;}
+  .app-header p{margin:2px 0 0; color:var(--text-muted); font-size:13.5px;}
+  .btn{border:1px solid var(--border-strong); background:var(--surface); color:var(--text); padding:9px 14px; border-radius:9px; font-size:13.5px; font-weight:600; display:inline-flex; align-items:center; gap:6px; transition:background .12s, border-color .12s;}
+  .btn:hover{background:var(--surface-alt);}
+  .btn-primary{background:var(--accent); border-color:var(--accent); color:var(--accent-contrast);}
+  .btn-primary:hover{background:var(--accent-strong); border-color:var(--accent-strong);}
+  .btn-danger{border-color:var(--danger); color:var(--danger); background:transparent;}
+  .btn-danger:hover{background:var(--danger-soft);}
+  .btn-ghost{border-color:transparent; background:transparent; color:var(--text-muted);}
+  .btn-ghost:hover{background:var(--surface-alt); color:var(--text);}
+  .btn-sm{padding:6px 10px; font-size:12.5px; border-radius:7px;}
+  .btn:disabled{opacity:.5; cursor:not-allowed;}
+
+  .banner{border:1px solid var(--warn); background:var(--warn-soft); color:var(--text); padding:10px 14px; border-radius:10px; font-size:13px; margin-bottom:18px; display:flex; gap:8px; align-items:flex-start;}
+
+  .stats{display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:22px;}
+  @media (max-width:720px){ .stats{grid-template-columns:repeat(2,1fr);} }
+  .stat-tile{background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:14px 16px; display:flex; flex-direction:column; gap:4px;}
+  .stat-tile .num{font-family:var(--mono); font-size:26px; font-weight:700; font-variant-numeric:tabular-nums;}
+  .stat-tile .lbl{font-size:12px; color:var(--text-muted); font-weight:600; letter-spacing:.02em;}
+  .stat-tile.warn .num{color:var(--danger);}
+  .stat-tile.upcoming .num{color:var(--info);}
+
+  .tabs{display:flex; gap:4px; border-bottom:1px solid var(--border); margin-bottom:18px; overflow-x:auto;}
+  .tab-btn{padding:10px 14px; font-size:13.5px; font-weight:600; color:var(--text-muted); background:transparent; border:none; border-bottom:2px solid transparent; white-space:nowrap;}
+  .tab-btn.active{color:var(--accent); border-bottom-color:var(--accent);}
+  .tab-btn .count{display:inline-block; margin-left:5px; background:var(--neutral-soft); color:var(--text-muted); font-size:11px; padding:1px 6px; border-radius:20px; font-family:var(--mono);}
+  .tab-btn.active .count{background:var(--accent-soft); color:var(--accent);}
+
+  .panel{display:flex; flex-direction:column; gap:12px;}
+  .empty{border:1px dashed var(--border-strong); border-radius:12px; padding:32px 20px; text-align:center; color:var(--text-muted); font-size:13.5px;}
+
+  .badge{display:inline-flex; align-items:center; gap:4px; font-size:11.5px; font-weight:700; padding:3px 8px; border-radius:20px; letter-spacing:.01em;}
+  .badge-urticaria{background:var(--accent-soft); color:var(--accent-strong);}
+  .badge-cough{background:var(--info-soft); color:var(--info);}
+  .badge-other{background:var(--neutral-soft); color:var(--text-muted);}
+  .badge-overdue{background:var(--danger-soft); color:var(--danger);}
+  .badge-today{background:var(--warn-soft); color:var(--warn);}
+  .badge-ended{background:var(--neutral-soft); color:var(--text-faint);}
+  .badge-visit{background:var(--warn-soft); color:var(--warn);}
+  .badge-improved{background:var(--success-soft); color:var(--success);}
+  .badge-same{background:var(--warn-soft); color:var(--warn);}
+  .badge-worse{background:var(--danger-soft); color:var(--danger);}
+  .badge-unknown{background:var(--neutral-soft); color:var(--text-muted);}
+
+  .case-card{background:var(--surface); border:1px solid var(--border); border-radius:13px; padding:16px 18px; box-shadow:var(--shadow);}
+  .case-top{display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; align-items:flex-start;}
+  .case-id{display:flex; flex-direction:column; gap:5px;}
+  .case-name{font-size:15.5px; font-weight:700;}
+  .case-meta-row{display:flex; gap:6px; flex-wrap:wrap; align-items:center;}
+  .case-phone{font-size:12.5px; color:var(--text-muted);}
+  .case-due{text-align:right; font-size:12px; color:var(--text-muted);}
+  .case-due .d{font-family:var(--mono); font-weight:700; font-size:13.5px; color:var(--text);}
+  .case-note{font-size:12.5px; color:var(--text-muted); margin-top:8px; background:var(--surface-alt); border-radius:8px; padding:8px 10px;}
+  .case-actions{display:flex; gap:8px; margin-top:12px; flex-wrap:wrap;}
+
+  .upcoming-row{display:flex; justify-content:space-between; align-items:center; padding:9px 12px; border:1px solid var(--border); border-radius:9px; background:var(--surface); font-size:12.5px;}
+  .upcoming-row + .upcoming-row{margin-top:6px;}
+
+  table{width:100%; border-collapse:collapse; font-size:13px;}
+  .table-wrap{overflow-x:auto; border:1px solid var(--border); border-radius:12px; background:var(--surface);}
+  th{text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--text-muted); padding:10px 12px; border-bottom:1px solid var(--border); white-space:nowrap;}
+  td{padding:10px 12px; border-bottom:1px solid var(--border); vertical-align:middle; white-space:nowrap;}
+  tr:last-child td{border-bottom:none;}
+  td.name-cell{font-weight:600; cursor:pointer; color:var(--accent);}
+  td.name-cell:hover{text-decoration:underline;}
+
+  .toolbar{display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:2px;}
+  .search-input{border:1px solid var(--border-strong); border-radius:9px; padding:8px 12px; font-size:13px; background:var(--surface); color:var(--text); min-width:220px;}
+  .toggle-chip{display:inline-flex; align-items:center; gap:6px; font-size:12.5px; color:var(--text-muted); border:1px solid var(--border-strong); border-radius:20px; padding:6px 12px; background:var(--surface);}
+
+  .script-card{background:var(--surface); border:1px solid var(--border); border-radius:13px; padding:16px 18px; margin-bottom:14px;}
+  .script-card h3{font-size:14px; margin-bottom:8px; display:flex; align-items:center; gap:8px;}
+  .script-card textarea{width:100%; min-height:180px; border:1px solid var(--border); border-radius:9px; padding:10px 12px; font-size:13px; line-height:1.65; color:var(--text); background:var(--surface-alt); resize:vertical;}
+  .script-card .row-end{display:flex; justify-content:flex-end; margin-top:8px; gap:8px; align-items:center;}
+  .save-hint{font-size:11.5px; color:var(--text-faint);}
+
+  .modal-overlay{position:fixed; inset:0; background:rgba(15,20,17,0.5); display:flex; align-items:flex-start; justify-content:center; padding:5vh 16px; overflow-y:auto; z-index:50;}
+  .modal{background:var(--surface); border-radius:16px; width:100%; max-width:560px; padding:22px 24px 24px; box-shadow:0 20px 60px rgba(0,0,0,0.3); border:1px solid var(--border);}
+  .modal.wide{max-width:640px;}
+  .modal-head{display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:14px;}
+  .modal-head h2{font-size:17px; font-weight:800;}
+  .modal-head .sub{font-size:12.5px; color:var(--text-muted); margin-top:3px;}
+  .close-x{background:transparent; border:none; font-size:18px; color:var(--text-faint); line-height:1; padding:4px;}
+  .field{display:flex; flex-direction:column; gap:6px; margin-bottom:14px;}
+  .field label{font-size:12.5px; font-weight:600; color:var(--text-muted);}
+  .field input[type=text], .field input[type=tel], .field input[type=date], .field textarea, .field select{border:1px solid var(--border-strong); border-radius:9px; padding:9px 11px; background:var(--bg); color:var(--text); font-size:13.5px;}
+  .field textarea{min-height:70px; resize:vertical;}
+  .field-row{display:flex; gap:12px;}
+  .field-row .field{flex:1;}
+  .pill-group{display:flex; gap:8px; flex-wrap:wrap;}
+  .pill-opt{border:1px solid var(--border-strong); background:var(--surface); color:var(--text-muted); padding:8px 13px; border-radius:20px; font-size:12.5px; font-weight:600;}
+  .pill-opt.selected{background:var(--accent-soft); border-color:var(--accent); color:var(--accent-strong);}
+  .checkbox-row{display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text);}
+  .modal-footer{display:flex; justify-content:flex-end; gap:8px; margin-top:18px; border-top:1px solid var(--border); padding-top:16px;}
+
+  .script-view{background:var(--surface-alt); border-radius:10px; padding:12px 14px; font-size:12.8px; line-height:1.7; color:var(--text); white-space:pre-wrap; max-height:220px; overflow-y:auto; margin-bottom:14px;}
+  .script-toggle{font-size:12.5px; color:var(--accent); font-weight:700; background:none; border:none; padding:0 0 10px; text-align:left;}
+
+  .history-item{border:1px solid var(--border); border-radius:10px; padding:10px 12px; margin-bottom:8px; font-size:12.5px;}
+  .history-item .h-top{display:flex; justify-content:space-between; gap:8px; margin-bottom:4px; flex-wrap:wrap;}
+  .history-item .h-date{font-family:var(--mono); font-weight:700;}
+  .history-item .h-note{color:var(--text-muted); margin-top:4px;}
+
+  .toast{position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:var(--accent-strong); color:#fff; padding:10px 18px; border-radius:30px; font-size:13px; font-weight:600; box-shadow:var(--shadow); z-index:100; opacity:0; transition:opacity .2s, transform .2s;}
+  .toast.show{opacity:1;}
+
+  .footer-note{margin-top:36px; font-size:11.5px; color:var(--text-faint); text-align:center; line-height:1.6;}
+  [hidden]{display:none !important;}
+</style>
+
+<div class="page">
+
+  <div class="app-header">
+    <div class="brand">
+      <div class="brand-mark">🌿</div>
+      <div>
+        <h1>두기 해피콜</h1>
+        <p>처방 후 증상 확인 콜 일정과 결과를 한곳에서 관리하세요</p>
+      </div>
+    </div>
+    <button class="btn btn-primary" id="btn-open-register">+ 신규 환자 등록</button>
+  </div>
+
+  <div id="db-banner" class="banner" hidden>
+    <span>⚠️</span>
+    <span>지금은 저장소에 연결되지 않은 미리보기 상태예요. 입력한 내용이 저장되지 않을 수 있어요 — 실제 사용 시에는 정상적으로 저장됩니다.</span>
+  </div>
+
+  <div class="stats">
+    <div class="stat-tile warn">
+      <div class="num mono" id="stat-overdue">0</div>
+      <div class="lbl">지연된 콜</div>
+    </div>
+    <div class="stat-tile">
+      <div class="num mono" id="stat-today">0</div>
+      <div class="lbl">오늘 콜 대상</div>
+    </div>
+    <div class="stat-tile upcoming">
+      <div class="num mono" id="stat-visit">0</div>
+      <div class="lbl">내원 예약 필요</div>
+    </div>
+    <div class="stat-tile">
+      <div class="num mono" id="stat-active">0</div>
+      <div class="lbl">진행중인 환자</div>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="today">오늘 콜 <span class="count" id="tab-count-today">0</span></button>
+    <button class="tab-btn" data-tab="visit">내원 예약 필요 <span class="count" id="tab-count-visit">0</span></button>
+    <button class="tab-btn" data-tab="all">전체 환자 <span class="count" id="tab-count-all">0</span></button>
+    <button class="tab-btn" data-tab="scripts">통화 스크립트</button>
+  </div>
+
+  <div class="panel" id="panel-today"></div>
+  <div class="panel" id="panel-visit" hidden></div>
+  <div class="panel" id="panel-all" hidden></div>
+  <div class="panel" id="panel-scripts" hidden></div>
+
+  <div class="footer-note">환자 정보는 이 문서에 접근 권한이 있는 조직 구성원과만 공유됩니다. 실제 진료 판단은 원장님 확인을 거쳐주세요.</div>
+</div>
+
+<div id="modal-root"></div>
+<div id="toast" class="toast"></div>
+
+<script>
+(function(){
+
+  // ---------- constants ----------
+  var CONDITIONS = {
+    urticaria: { label:'두드러기', badge:'badge-urticaria' },
+    cough: { label:'기침', badge:'badge-cough' },
+    other: { label:'기타', badge:'badge-other' }
+  };
+  var SYMPTOM_LABELS = { improved:'호전', same:'유지', worse:'악화', unknown:'판단보류' };
+  var DEFAULT_SCRIPTS = {
+    urticaria:
+"안녕하세요, {name}님. 두기한의원입니다. 처방해드린 약 잘 드시고 계신지 확인차 연락드렸어요. 통화 잠시 괜찮으실까요?\n\n"+
+"1. 두드러기 증상은 처음보다 어떠세요? 나아지셨나요, 비슷한가요, 심해지셨나요?\n"+
+"2. 가려운 정도는 어느 정도세요? (거의 없음 / 참을 만함 / 많이 힘듦)\n"+
+"3. 밤에 가려움 때문에 잠을 설치는 날이 있으신가요?\n"+
+"4. 두드러기가 새로 올라오는 부위나 빈도에 변화가 있으신가요?\n"+
+"5. 약은 빠짐없이 드시고 계신가요? 속쓰림 등 불편한 점은 없으셨어요?\n\n"+
+"[호전] 다행이네요! 지금처럼 유지해주시고 다음 콜 때 다시 확인드릴게요.\n"+
+"[유지/악화] 조금 더 자세히 봐드려야 할 것 같아요. 원장님과 상의해서 처방 조정이 필요할 수 있는데, 가까운 시일 내 내원 가능하신 날짜가 있으실까요?\n\n"+
+"통화 감사합니다. 불편하신 점 있으면 언제든 연락 주세요.",
+    cough:
+"안녕하세요, {name}님. 두기한의원입니다. 처방약 복용 경과 확인차 연락드렸습니다.\n\n"+
+"1. 기침 증상은 어떠세요? 횟수나 강도에 변화가 있으신가요?\n"+
+"2. 가래가 동반되나요? 색이나 양에 변화가 있으신가요?\n"+
+"3. 밤에 기침 때문에 잠에서 깨는 경우가 있으신가요?\n"+
+"4. 숨이 차거나 가슴이 답답한 느낌은 없으신가요?\n"+
+"5. 약 복용은 잘 하고 계신가요? 불편한 점은 없으셨어요?\n\n"+
+"[호전] 잘 관리되고 계시네요, 지금처럼 유지해주세요.\n"+
+"[유지/악화] 증상 재평가가 필요할 수 있어 내원을 권해드리고 싶은데, 가능하신 날짜가 있으실까요?\n\n"+
+"통화 감사합니다. 불편하신 점 있으면 언제든 연락 주세요.",
+    other:
+"안녕하세요, {name}님. 두기한의원입니다. 처방약 복용 경과 확인차 연락드렸습니다.\n\n"+
+"1. 요즘 증상은 처음과 비교해 어떠세요?\n"+
+"2. 일상생활에 불편함을 주는 정도인가요?\n"+
+"3. 약은 빠짐없이 드시고 계신가요? 불편한 점은 없으셨어요?\n\n"+
+"[호전] 다행이네요! 지금처럼 유지해주세요.\n"+
+"[유지/악화] 내원해서 다시 한번 봐드리는 게 좋을 것 같은데, 가능하신 날짜가 있으실까요?\n\n"+
+"통화 감사합니다. 불편하신 점 있으면 언제든 연락 주세요."
+  };
+
+  // ---------- date helpers ----------
+  function pad(n){ return String(n).padStart(2,'0'); }
+  function toYMD(d){ return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()); }
+  function todayStr(){ return toYMD(new Date()); }
+  function addDays(ymd, days){
+    var p = ymd.split('-').map(Number);
+    var dt = new Date(p[0], p[1]-1, p[2]);
+    dt.setDate(dt.getDate()+days);
+    return toYMD(dt);
+  }
+  function addWeeks(ymd, weeks){ return addDays(ymd, weeks*7); }
+  function daysDiff(a,b){
+    var pa=a.split('-').map(Number), pb=b.split('-').map(Number);
+    var da=Date.UTC(pa[0],pa[1]-1,pa[2]), db=Date.UTC(pb[0],pb[1]-1,pb[2]);
+    return Math.round((da-db)/86400000);
+  }
+  function formatK(ymd){
+    var p = ymd.split('-').map(Number);
+    var dt = new Date(p[0], p[1]-1, p[2]);
+    var days=['일','월','화','수','목','금','토'];
+    return p[1]+'월 '+p[2]+'일('+days[dt.getDay()]+')';
+  }
+  function formatKShort(ymd){
+    var p = ymd.split('-').map(Number);
+    return p[1]+'.'+p[2]+'.';
+  }
+  function nowISO(){ return new Date().toISOString(); }
+
+  function escapeHtml(s){
+    return String(s==null?'':s).replace(/[&<>"']/g, function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+  }
+
+  // ---------- state ----------
+  var state = { cases: [], scripts: {}, tab:'today', search:'', showEnded:false, dbReady:false };
+  var lastStaffName = '';
+
+  function scriptFor(cond){ return state.scripts[cond] || DEFAULT_SCRIPTS[cond] || DEFAULT_SCRIPTS.other; }
+
+  // ---------- store (real db or local fallback) ----------
+  var store = {
+    mode: 'local',
+    casesCol: null,
+    scriptsCol: null,
+    seedGuard: false,
+
+    async init(){
+      var db = null;
+      try{
+        if (window.claude && window.claude.use){ db = await window.claude.use('db'); }
+      }catch(e){ db = null; }
+      if (db){
+        this.mode = 'real';
+        this.db = db;
+        this.casesCol = db.collection('cases');
+        this.scriptsCol = db.collection('scripts');
+        this.casesCol.orderBy('nextCallDate','asc').limit(500).onSnapshot(function(snap){
+          state.cases = snap.docs.map(function(d){ return Object.assign({id:d.id}, d.data()); });
+          store.maybeSeed();
+          render();
+        }, function(err){ console.error('cases snapshot error', err); });
+        this.scriptsCol.onSnapshot(function(snap){
+          var s = {};
+          snap.docs.forEach(function(d){ s[d.id] = (d.data()||{}).text; });
+          state.scripts = s;
+          if (state.tab==='scripts') renderScriptsTab();
+        }, function(err){ console.error('scripts snapshot error', err); });
+      } else {
+        this.mode = 'local';
+        seedLocalExample();
+        state.dbReady = true;
+        document.getElementById('db-banner').hidden = false;
+        render();
+      }
+    },
+
+    async maybeSeed(){
+      if (this.mode!=='real' || this.seedGuard) return;
+      this.seedGuard = true;
+      try{
+        var metaRef = this.db.doc('meta/seed');
+        var snap = await metaRef.get();
+        if (!snap.exists){
+          await metaRef.set({ seededAt: nowISO() });
+          if (state.cases.length===0){
+            await seedRealExample(this.casesCol);
+          }
+        }
+      }catch(e){ console.error('seed error', e); }
+    },
+
+    async addCase(data){
+      if (this.mode==='real'){
+        await this.casesCol.add(data);
+      } else {
+        data.id = 'local_'+Date.now();
+        data.__history = [];
+        state.cases.unshift(data);
+        render();
+      }
+    },
+
+    async updateCase(id, patch){
+      if (this.mode==='real'){
+        await this.casesCol.doc(id).update(patch);
+      } else {
+        var c = state.cases.find(function(x){ return x.id===id; });
+        if (c) Object.assign(c, patch);
+        render();
+      }
+    },
+
+    async deleteCase(id){
+      if (this.mode==='real'){
+        await this.casesCol.doc(id).delete();
+      } else {
+        state.cases = state.cases.filter(function(x){ return x.id!==id; });
+        render();
+      }
+    },
+
+    async addCallLog(caseId, callData){
+      if (this.mode==='real'){
+        await this.casesCol.doc(caseId).collection('calls').add(callData);
+      } else {
+        var c = state.cases.find(function(x){ return x.id===caseId; });
+        if (c){ c.__history = c.__history || []; c.__history.unshift(callData); }
+      }
+    },
+
+    async fetchHistory(caseId){
+      if (this.mode==='real'){
+        var snap = await this.casesCol.doc(caseId).collection('calls').orderBy('loggedAt','desc').limit(50).get();
+        return snap.docs.map(function(d){ return d.data(); });
+      } else {
+        var c = state.cases.find(function(x){ return x.id===caseId; });
+        return (c && c.__history) || [];
+      }
+    },
+
+    async saveScript(key, text){
+      if (this.mode==='real'){
+        await this.db.doc('scripts/'+key).set({ text: text, updatedAt: nowISO() });
+      } else {
+        state.scripts[key] = text;
+        renderScriptsTab();
+      }
+    }
+  };
+
+  async function seedRealExample(casesCol){
+    var start = addWeeks(todayStr(), -4);
+    var ref = await casesCol.add({
+      name: '홍길동 (예시)',
+      phone: '010-0000-0000',
+      condition: 'urticaria',
+      conditionLabel: '',
+      cycleWeeks: 4,
+      startDate: start,
+      nextCallDate: todayStr(),
+      status: 'active',
+      callCount: 0,
+      memo: '예시 데이터입니다 — 자유롭게 삭제하거나 실제 환자 정보로 교체해 사용하세요.',
+      staffAssigned: '',
+      lastCall: null,
+      createdAt: nowISO()
+    });
+  }
+  function seedLocalExample(){
+    var start = addWeeks(todayStr(), -4);
+    state.cases = [{
+      id:'local_example',
+      name:'홍길동 (예시)', phone:'010-0000-0000', condition:'urticaria', conditionLabel:'',
+      cycleWeeks:4, startDate:start, nextCallDate: todayStr(), status:'active', callCount:0,
+      memo:'예시 데이터입니다 — 미리보기 모드라 저장되지 않습니다.', staffAssigned:'',
+      lastCall:null, createdAt: nowISO(), __history:[]
+    }];
+  }
+
+  // ---------- toast ----------
+  var toastTimer=null;
+  function toast(msg){
+    var el = document.getElementById('toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function(){ el.classList.remove('show'); }, 2200);
+  }
+
+  // ---------- derived views ----------
+  function activeCases(){ return state.cases.filter(function(c){ return c.status==='active'; }); }
+  function todayList(){
+    var t = todayStr();
+    return activeCases().filter(function(c){ return c.nextCallDate <= t; })
+      .sort(function(a,b){ return daysDiff(t,a.nextCallDate) - daysDiff(t,b.nextCallDate) < 0 ? 1 : (a.nextCallDate===b.nextCallDate ? a.name.localeCompare(b.name) : (a.nextCallDate < b.nextCallDate ? -1 : 1)); });
+  }
+  function upcomingList(){
+    var t = todayStr();
+    return activeCases().filter(function(c){ return c.nextCallDate > t && daysDiff(c.nextCallDate,t) >= -7; })
+      .sort(function(a,b){ return a.nextCallDate < b.nextCallDate ? -1 : 1; })
+      .slice(0,20);
+  }
+  function visitNeededList(){
+    return state.cases.filter(function(c){ return c.lastCall && c.lastCall.visitNeeded && !c.lastCall.visitBooked; });
+  }
+
+  // ---------- rendering ----------
+  function render(){
+    renderStats();
+    renderTabsCount();
+    if (state.tab==='today') renderTodayTab();
+    if (state.tab==='visit') renderVisitTab();
+    if (state.tab==='all') renderAllTab();
+    if (state.tab==='scripts') renderScriptsTab();
+  }
+
+  function renderStats(){
+    var t = todayStr();
+    var overdue = todayList().filter(function(c){ return c.nextCallDate < t; }).length;
+    document.getElementById('stat-overdue').textContent = overdue;
+    document.getElementById('stat-today').textContent = todayList().length;
+    document.getElementById('stat-visit').textContent = visitNeededList().length;
+    document.getElementById('stat-active').textContent = activeCases().length;
+  }
+  function renderTabsCount(){
+    document.getElementById('tab-count-today').textContent = todayList().length;
+    document.getElementById('tab-count-visit').textContent = visitNeededList().length;
+    document.getElementById('tab-count-all').textContent = state.cases.length;
+  }
+
+  function conditionBadge(c){
+    var meta = CONDITIONS[c.condition] || CONDITIONS.other;
+    var label = c.condition==='other' && c.conditionLabel ? c.conditionLabel : meta.label;
+    return '<span class="badge '+meta.badge+'">'+escapeHtml(label)+'</span>';
+  }
+
+  function callCard(c, opts){
+    opts = opts || {};
+    var t = todayStr();
+    var overdueDays = daysDiff(t, c.nextCallDate);
+    var duePill = '';
+    if (overdueDays > 0) duePill = '<span class="badge badge-overdue">'+overdueDays+'일 지연</span>';
+    else if (overdueDays === 0) duePill = '<span class="badge badge-today">오늘</span>';
+    var nth = (c.callCount||0) + 1;
+    var lastSummary = '';
+    if (c.lastCall){
+      var sLabel = SYMPTOM_LABELS[c.lastCall.symptomStatus] || '';
+      lastSummary = '<div class="case-note">최근 통화('+formatKShort(c.lastCall.date)+'): '
+        + (sLabel ? '<span class="badge badge-'+c.lastCall.symptomStatus+'">'+sLabel+'</span> ' : '')
+        + escapeHtml(c.lastCall.note||'메모 없음') + '</div>';
+    } else if (c.memo){
+      lastSummary = '<div class="case-note">'+escapeHtml(c.memo)+'</div>';
+    }
+    return ''+
+    '<div class="case-card" data-id="'+c.id+'">'+
+      '<div class="case-top">'+
+        '<div class="case-id">'+
+          '<div class="case-name">'+escapeHtml(c.name)+'</div>'+
+          '<div class="case-meta-row">'+conditionBadge(c)+
+            '<span class="badge badge-other">'+c.cycleWeeks+'주 주기 · '+nth+'번째 콜</span>'+
+            duePill+
+          '</div>'+
+          '<div class="case-phone mono">'+escapeHtml(c.phone)+'</div>'+
+        '</div>'+
+        '<div class="case-due"><div>다음 콜</div><div class="d">'+formatK(c.nextCallDate)+'</div></div>'+
+      '</div>'+
+      lastSummary+
+      '<div class="case-actions">'+
+        '<button class="btn btn-primary btn-sm" onclick="HC.openCallModal(\''+c.id+'\')">📞 통화 기록</button>'+
+        '<button class="btn btn-sm" onclick="HC.quickNoAnswer(\''+c.id+'\')">부재중 (내일 재시도)</button>'+
+        '<button class="btn btn-ghost btn-sm" onclick="HC.openDetail(\''+c.id+'\')">상세 · 이력</button>'+
+      '</div>'+
+    '</div>';
+  }
+
+  function renderTodayTab(){
+    var el = document.getElementById('panel-today');
+    var list = todayList();
+    var html = '';
+    if (list.length===0){
+      html += '<div class="empty">오늘 연락드릴 환자가 없어요. 새 환자를 등록하거나 잠시 후 다시 확인해주세요.</div>';
+    } else {
+      html += list.map(function(c){ return callCard(c); }).join('');
+    }
+    var up = upcomingList();
+    if (up.length){
+      html += '<h3 style="margin-top:22px; font-size:13.5px; color:var(--text-muted); font-weight:700;">이번 주 예정</h3>';
+      html += '<div style="margin-top:8px;">' + up.map(function(c){
+        return '<div class="upcoming-row"><span>'+escapeHtml(c.name)+' <span class="mono" style="color:var(--text-faint)">'+escapeHtml(c.phone)+'</span> '+conditionBadge(c)+'</span><span class="mono">'+formatK(c.nextCallDate)+'</span></div>';
+      }).join('') + '</div>';
+    }
+    el.innerHTML = html;
+  }
+
+  function renderVisitTab(){
+    var el = document.getElementById('panel-visit');
+    var list = visitNeededList();
+    if (list.length===0){
+      el.innerHTML = '<div class="empty">내원 예약이 필요한 환자가 없어요.</div>';
+      return;
+    }
+    el.innerHTML = list.map(function(c){
+      var sLabel = SYMPTOM_LABELS[c.lastCall.symptomStatus] || '';
+      return '<div class="case-card">'+
+        '<div class="case-top">'+
+          '<div class="case-id">'+
+            '<div class="case-name">'+escapeHtml(c.name)+'</div>'+
+            '<div class="case-meta-row">'+conditionBadge(c)+'<span class="badge badge-visit">내원 예약 필요</span>'+
+              (sLabel ? '<span class="badge badge-'+c.lastCall.symptomStatus+'">'+sLabel+'</span>' : '')+
+            '</div>'+
+            '<div class="case-phone mono">'+escapeHtml(c.phone)+'</div>'+
+          '</div>'+
+          '<div class="case-due"><div>통화일</div><div class="d">'+formatK(c.lastCall.date)+'</div></div>'+
+        '</div>'+
+        '<div class="case-note">'+escapeHtml(c.lastCall.note || '메모 없음')+'</div>'+
+        '<div class="case-actions">'+
+          '<button class="btn btn-primary btn-sm" onclick="HC.markVisitBooked(\''+c.id+'\')">✅ 예약 완료로 표시</button>'+
+          '<button class="btn btn-ghost btn-sm" onclick="HC.openDetail(\''+c.id+'\')">상세 · 이력</button>'+
+        '</div>'+
+      '</div>';
+    }).join('');
+  }
+
+  function renderAllTab(){
+    var el = document.getElementById('panel-all');
+    var q = state.search.trim().toLowerCase();
+    var list = state.cases.filter(function(c){
+      if (!state.showEnded && c.status==='ended') return false;
+      if (!q) return true;
+      return (c.name||'').toLowerCase().indexOf(q)>=0 || (c.phone||'').indexOf(q)>=0;
+    });
+    var rows = list.map(function(c){
+      var meta = CONDITIONS[c.condition] || CONDITIONS.other;
+      var label = c.condition==='other' && c.conditionLabel ? c.conditionLabel : meta.label;
+      var statusBadge = c.status==='ended' ? '<span class="badge badge-ended">종료</span>' : '<span class="badge badge-improved">진행중</span>';
+      return '<tr>'+
+        '<td class="name-cell" onclick="HC.openDetail(\''+c.id+'\')">'+escapeHtml(c.name)+'</td>'+
+        '<td class="mono">'+escapeHtml(c.phone)+'</td>'+
+        '<td>'+escapeHtml(label)+'</td>'+
+        '<td class="mono">'+c.startDate+'</td>'+
+        '<td>'+c.cycleWeeks+'주</td>'+
+        '<td class="mono">'+c.nextCallDate+'</td>'+
+        '<td>'+statusBadge+'</td>'+
+        '<td><button class="btn btn-ghost btn-sm" onclick="HC.openDetail(\''+c.id+'\')">상세</button></td>'+
+      '</tr>';
+    }).join('');
+    var html = ''+
+    '<div class="toolbar">'+
+      '<input class="search-input" id="search-input" placeholder="이름 또는 연락처로 검색" value="'+escapeHtml(state.search)+'">'+
+      '<label class="toggle-chip"><input type="checkbox" id="show-ended" '+(state.showEnded?'checked':'')+' style="margin:0;"> 종료된 환자 포함</label>'+
+    '</div>'+
+    '<div class="table-wrap"><table><thead><tr>'+
+      '<th>환자명</th><th>연락처</th><th>증상</th><th>처방시작일</th><th>콜주기</th><th>다음콜</th><th>상태</th><th></th>'+
+    '</tr></thead><tbody>'+
+    (rows || '<tr><td colspan="8" style="color:var(--text-muted); text-align:center; padding:24px;">등록된 환자가 없어요.</td></tr>')+
+    '</tbody></table></div>';
+    el.innerHTML = html;
+    document.getElementById('search-input').addEventListener('input', function(e){ state.search = e.target.value; renderAllTab(); });
+    document.getElementById('show-ended').addEventListener('change', function(e){ state.showEnded = e.target.checked; renderAllTab(); });
+  }
+
+  function renderScriptsTab(){
+    var el = document.getElementById('panel-scripts');
+    el.innerHTML = ['urticaria','cough','other'].map(function(key){
+      var meta = CONDITIONS[key];
+      return '<div class="script-card">'+
+        '<h3>'+conditionBadge({condition:key})+' 콜 스크립트</h3>'+
+        '<textarea id="script-'+key+'">'+escapeHtml(scriptFor(key))+'</textarea>'+
+        '<div class="row-end"><span class="save-hint">담당 직원 누구나 자유롭게 문구를 다듬을 수 있어요.</span><button class="btn btn-primary btn-sm" onclick="HC.saveScript(\''+key+'\')">저장</button></div>'+
+      '</div>';
+    }).join('');
+  }
+
+  // ---------- modal helpers ----------
+  function openModal(html){
+    document.getElementById('modal-root').innerHTML =
+      '<div class="modal-overlay" id="active-overlay" onclick="if(event.target===this) HC.closeModal()">'+html+'</div>';
+  }
+  function closeModal(){ document.getElementById('modal-root').innerHTML=''; }
+
+  // ---------- register modal ----------
+  var registerState = { condition:'urticaria', cycleWeeks:4 };
+  function openRegisterModal(){
+    registerState = { condition:'urticaria', cycleWeeks:4 };
+    renderRegisterModal();
+  }
+  function renderRegisterModal(){
+    var html = ''+
+    '<div class="modal">'+
+      '<div class="modal-head"><div><h2>신규 환자 등록</h2><div class="sub">처방 시작일과 콜 주기를 입력하면 다음 콜 일정이 자동 계산돼요.</div></div><button class="close-x" onclick="HC.closeModal()">✕</button></div>'+
+      '<div class="field-row">'+
+        '<div class="field"><label>환자명 *</label><input type="text" id="rg-name" placeholder="예: 김민지"></div>'+
+        '<div class="field"><label>연락처 *</label><input type="tel" id="rg-phone" placeholder="010-0000-0000"></div>'+
+      '</div>'+
+      '<div class="field">'+
+        '<label>증상 유형</label>'+
+        '<div class="pill-group" id="rg-condition-group">'+
+          Object.keys(CONDITIONS).map(function(k){ return '<button type="button" class="pill-opt'+(registerState.condition===k?' selected':'')+'" data-val="'+k+'" onclick="HC.setRegCondition(\''+k+'\')">'+CONDITIONS[k].label+'</button>'; }).join('')+
+        '</div>'+
+      '</div>'+
+      '<div class="field" id="rg-other-label-field" '+(registerState.condition==='other'?'':'hidden')+'>'+
+        '<label>기타 증상 이름</label><input type="text" id="rg-other-label" placeholder="예: 아토피">'+
+      '</div>'+
+      '<div class="field-row">'+
+        '<div class="field"><label>처방 시작일</label><input type="date" id="rg-start" value="'+todayStr()+'"></div>'+
+        '<div class="field">'+
+          '<label>콜 주기</label>'+
+          '<div class="pill-group">'+
+            '<button type="button" class="pill-opt'+(registerState.cycleWeeks===2?' selected':'')+'" data-val="2" onclick="HC.setRegCycle(2)">2주마다</button>'+
+            '<button type="button" class="pill-opt'+(registerState.cycleWeeks===4?' selected':'')+'" data-val="4" onclick="HC.setRegCycle(4)">4주마다</button>'+
+          '</div>'+
+        '</div>'+
+      '</div>'+
+      '<div class="field"><label>담당자 / 메모 (선택)</label><textarea id="rg-memo" placeholder="예: 처방의 김OO 원장, 특이사항 등"></textarea></div>'+
+      '<div class="modal-footer"><button class="btn" onclick="HC.closeModal()">취소</button><button class="btn btn-primary" onclick="HC.submitRegister()">등록</button></div>'+
+    '</div>';
+    openModal(html);
+  }
+  function setRegCondition(k){
+    registerState.condition = k;
+    document.querySelectorAll('#rg-condition-group .pill-opt').forEach(function(b){ b.classList.toggle('selected', b.dataset.val===k); });
+    document.getElementById('rg-other-label-field').hidden = k!=='other';
+  }
+  function setRegCycle(n){
+    registerState.cycleWeeks = n;
+    document.querySelectorAll('.field-row .pill-group .pill-opt').forEach(function(b){
+      if (b.dataset.val==='2' || b.dataset.val==='4') b.classList.toggle('selected', Number(b.dataset.val)===n);
+    });
+  }
+  async function submitRegister(){
+    var name = document.getElementById('rg-name').value.trim();
+    var phone = document.getElementById('rg-phone').value.trim();
+    var start = document.getElementById('rg-start').value || todayStr();
+    var memo = document.getElementById('rg-memo').value.trim();
+    var otherLabel = document.getElementById('rg-other-label') ? document.getElementById('rg-other-label').value.trim() : '';
+    if (!name || !phone){ toast('환자명과 연락처를 입력해주세요.'); return; }
+    var nextCallDate = addWeeks(start, registerState.cycleWeeks);
+    var data = {
+      name: name, phone: phone, condition: registerState.condition, conditionLabel: otherLabel,
+      cycleWeeks: registerState.cycleWeeks, startDate: start, nextCallDate: nextCallDate,
+      status: 'active', callCount: 0, memo: memo, staffAssigned: lastStaffName, lastCall: null,
+      createdAt: nowISO()
+    };
+    try{
+      await store.addCase(data);
+      toast('환자가 등록되었어요.');
+      closeModal();
+    }catch(e){ console.error(e); toast('등록에 실패했어요. 다시 시도해주세요.'); }
+  }
+
+  // ---------- call log modal ----------
+  var callModalState = { caseId:null, symptomStatus:'improved', visitNeeded:false, endCase:false, scriptOpen:false };
+  function openCallModal(caseId){
+    var c = state.cases.find(function(x){ return x.id===caseId; });
+    if (!c) return;
+    callModalState = { caseId: caseId, symptomStatus:'improved', visitNeeded:false, endCase:false, scriptOpen:false };
+    renderCallModal(c);
+  }
+  function renderCallModal(c){
+    var nth = (c.callCount||0)+1;
+    var script = scriptFor(c.condition).replace(/\{name\}/g, c.name);
+    var html = ''+
+    '<div class="modal wide">'+
+      '<div class="modal-head"><div><h2>통화 기록 — '+escapeHtml(c.name)+'</h2><div class="sub">'+escapeHtml(c.phone)+' · '+conditionBadge(c)+' · '+nth+'번째 콜</div></div><button class="close-x" onclick="HC.closeModal()">✕</button></div>'+
+      '<button type="button" class="script-toggle" onclick="HC.toggleScript()">'+(callModalState.scriptOpen?'▲ 스크립트 숨기기':'▼ 통화 스크립트 보기')+'</button>'+
+      '<div id="call-script-view" class="script-view" '+(callModalState.scriptOpen?'':'hidden')+'>'+escapeHtml(script)+'</div>'+
+      '<div class="field"><label>증상 상태</label>'+
+        '<div class="pill-group" id="cl-symptom-group">'+
+          Object.keys(SYMPTOM_LABELS).map(function(k){ return '<button type="button" class="pill-opt'+(callModalState.symptomStatus===k?' selected':'')+'" data-val="'+k+'" onclick="HC.setCallSymptom(\''+k+'\')">'+SYMPTOM_LABELS[k]+'</button>'; }).join('')+
+        '</div>'+
+      '</div>'+
+      '<div class="field"><label>통화 메모</label><textarea id="cl-note" placeholder="증상 경과, 특이사항 등을 기록해주세요"></textarea></div>'+
+      '<div class="field"><label class="checkbox-row"><input type="checkbox" id="cl-visit" onchange="HC.setCallVisit(this.checked)"> 내원 예약이 필요해요</label></div>'+
+      '<div class="field"><label class="checkbox-row"><input type="checkbox" id="cl-end" onchange="HC.setCallEnd(this.checked)"> 이 콜을 마지막으로 케이스를 종료할게요</label></div>'+
+      '<div class="field"><label>담당 직원</label><input type="text" id="cl-staff" value="'+escapeHtml(lastStaffName)+'" placeholder="이름을 입력해주세요"></div>'+
+      '<div class="modal-footer"><button class="btn" onclick="HC.closeModal()">취소</button><button class="btn btn-primary" onclick="HC.submitCall()">완료 저장</button></div>'+
+    '</div>';
+    openModal(html);
+  }
+  function toggleScript(){
+    callModalState.scriptOpen = !callModalState.scriptOpen;
+    var v = document.getElementById('call-script-view');
+    v.hidden = !callModalState.scriptOpen;
+    document.querySelector('.script-toggle').textContent = callModalState.scriptOpen ? '▲ 스크립트 숨기기' : '▼ 통화 스크립트 보기';
+  }
+  function setCallSymptom(k){
+    callModalState.symptomStatus = k;
+    document.querySelectorAll('#cl-symptom-group .pill-opt').forEach(function(b){ b.classList.toggle('selected', b.dataset.val===k); });
+  }
+  function setCallVisit(v){ callModalState.visitNeeded = v; }
+  function setCallEnd(v){ callModalState.endCase = v; }
+
+  async function submitCall(){
+    var c = state.cases.find(function(x){ return x.id===callModalState.caseId; });
+    if (!c) return;
+    var note = document.getElementById('cl-note').value.trim();
+    var staffName = document.getElementById('cl-staff').value.trim();
+    lastStaffName = staffName;
+    var today = todayStr();
+    var nth = (c.callCount||0)+1;
+    var callData = {
+      date: today, loggedAt: nowISO(), status:'completed', scheduledDate: c.nextCallDate,
+      symptomStatus: callModalState.symptomStatus, note: note,
+      visitNeeded: callModalState.visitNeeded, visitBooked:false,
+      staffName: staffName, callNumber: nth
+    };
+    var patch = {
+      callCount: nth, lastCall: callData,
+      status: callModalState.endCase ? 'ended' : 'active',
+      nextCallDate: callModalState.endCase ? c.nextCallDate : addWeeks(today, c.cycleWeeks)
+    };
+    try{
+      await store.addCallLog(c.id, callData);
+      await store.updateCase(c.id, patch);
+      toast('통화 기록이 저장되었어요.');
+      closeModal();
+    }catch(e){ console.error(e); toast('저장에 실패했어요. 다시 시도해주세요.'); }
+  }
+
+  async function quickNoAnswer(caseId){
+    var c = state.cases.find(function(x){ return x.id===caseId; });
+    if (!c) return;
+    var nth = (c.callCount||0)+1;
+    var callData = {
+      date: todayStr(), loggedAt: nowISO(), status:'no_answer', scheduledDate: c.nextCallDate,
+      symptomStatus:null, note:'부재중 — 다음날 재시도 예정', visitNeeded:false, visitBooked:false,
+      staffName: lastStaffName, callNumber: nth
+    };
+    try{
+      await store.addCallLog(c.id, callData);
+      await store.updateCase(c.id, { callCount: nth, nextCallDate: addDays(todayStr(),1) });
+      toast('내일 다시 시도하도록 일정이 변경되었어요.');
+    }catch(e){ console.error(e); toast('처리에 실패했어요.'); }
+  }
+
+  async function markVisitBooked(caseId){
+    var c = state.cases.find(function(x){ return x.id===caseId; });
+    if (!c || !c.lastCall) return;
+    var updated = Object.assign({}, c.lastCall, { visitBooked:true });
+    try{
+      await store.updateCase(caseId, { lastCall: updated });
+      toast('예약 완료로 표시했어요.');
+    }catch(e){ console.error(e); toast('처리에 실패했어요.'); }
+  }
+
+  // ---------- detail modal ----------
+  async function openDetail(caseId){
+    var c = state.cases.find(function(x){ return x.id===caseId; });
+    if (!c) return;
+    var history = await store.fetchHistory(caseId);
+    renderDetailModal(c, history);
+  }
+  function renderDetailModal(c, history){
+    var meta = CONDITIONS[c.condition] || CONDITIONS.other;
+    var label = c.condition==='other' && c.conditionLabel ? c.conditionLabel : meta.label;
+    var historyHtml = history.length ? history.map(function(h){
+      var sLabel = h.symptomStatus ? (SYMPTOM_LABELS[h.symptomStatus]||'') : (h.status==='no_answer' ? '부재중' : '');
+      return '<div class="history-item">'+
+        '<div class="h-top"><span class="h-date">'+formatK(h.date)+'</span>'+(sLabel?'<span class="badge badge-'+(h.symptomStatus||'unknown')+'">'+sLabel+'</span>':'')+(h.staffName?'<span style="color:var(--text-faint)">'+escapeHtml(h.staffName)+'</span>':'')+'</div>'+
+        '<div class="h-note">'+escapeHtml(h.note||'')+'</div>'+
+      '</div>';
+    }).join('') : '<div class="empty" style="padding:16px;">아직 통화 기록이 없어요.</div>';
+    var html = ''+
+    '<div class="modal wide">'+
+      '<div class="modal-head"><div><h2>'+escapeHtml(c.name)+'</h2><div class="sub">'+escapeHtml(c.phone)+' · '+escapeHtml(label)+' · '+c.cycleWeeks+'주 주기</div></div><button class="close-x" onclick="HC.closeModal()">✕</button></div>'+
+      '<div class="field-row">'+
+        '<div class="field"><label>처방 시작일</label><div class="mono" style="font-size:13.5px;">'+c.startDate+'</div></div>'+
+        '<div class="field"><label>다음 콜 예정일</label><div class="mono" style="font-size:13.5px;">'+(c.status==='ended' ? '—' : formatK(c.nextCallDate))+'</div></div>'+
+        '<div class="field"><label>상태</label><div>'+(c.status==='ended'?'<span class="badge badge-ended">종료</span>':'<span class="badge badge-improved">진행중</span>')+'</div></div>'+
+      '</div>'+
+      (c.memo ? '<div class="case-note" style="margin-bottom:14px;">'+escapeHtml(c.memo)+'</div>' : '')+
+      '<h3 style="font-size:13px; color:var(--text-muted); margin-bottom:8px;">통화 이력</h3>'+
+      historyHtml+
+      '<div class="modal-footer">'+
+        '<button class="btn btn-danger" onclick="HC.deleteCase(\''+c.id+'\')">환자 삭제</button>'+
+        (c.status==='ended'
+          ? '<button class="btn" onclick="HC.toggleStatus(\''+c.id+'\',\'active\')">케이스 재개</button>'
+          : '<button class="btn" onclick="HC.toggleStatus(\''+c.id+'\',\'ended\')">케이스 종료</button>')+
+        '<button class="btn btn-primary" onclick="HC.closeModal(); HC.openCallModal(\''+c.id+'\')">📞 통화 기록</button>'+
+      '</div>'+
+    '</div>';
+    openModal(html);
+  }
+  async function toggleStatus(id, status){
+    try{
+      await store.updateCase(id, { status: status });
+      toast(status==='ended' ? '케이스를 종료했어요.' : '케이스를 다시 활성화했어요.');
+      closeModal();
+    }catch(e){ console.error(e); toast('처리에 실패했어요.'); }
+  }
+  async function deleteCase(id){
+    if (!confirm('이 환자 기록을 삭제할까요? 되돌릴 수 없어요.')) return;
+    try{
+      await store.deleteCase(id);
+      toast('삭제했어요.');
+      closeModal();
+    }catch(e){ console.error(e); toast('삭제에 실패했어요.'); }
+  }
+
+  async function saveScript(key){
+    var text = document.getElementById('script-'+key).value;
+    try{
+      await store.saveScript(key, text);
+      toast('스크립트를 저장했어요.');
+    }catch(e){ console.error(e); toast('저장에 실패했어요.'); }
+  }
+
+  // ---------- tabs ----------
+  function switchTab(tab){
+    state.tab = tab;
+    document.querySelectorAll('.tab-btn').forEach(function(b){ b.classList.toggle('active', b.dataset.tab===tab); });
+    ['today','visit','all','scripts'].forEach(function(t){ document.getElementById('panel-'+t).hidden = t!==tab; });
+    render();
+  }
+
+  document.querySelectorAll('.tab-btn').forEach(function(b){
+    b.addEventListener('click', function(){ switchTab(b.dataset.tab); });
+  });
+  document.getElementById('btn-open-register').addEventListener('click', openRegisterModal);
+
+  // ---------- public API ----------
+  window.HC = {
+    openCallModal: openCallModal, closeModal: closeModal, quickNoAnswer: quickNoAnswer,
+    openDetail: openDetail, markVisitBooked: markVisitBooked, toggleStatus: toggleStatus,
+    deleteCase: deleteCase, saveScript: saveScript, setRegCondition: setRegCondition,
+    setRegCycle: setRegCycle, submitRegister: submitRegister, toggleScript: toggleScript,
+    setCallSymptom: setCallSymptom, setCallVisit: setCallVisit, setCallEnd: setCallEnd,
+    submitCall: submitCall
+  };
+
+  store.init();
+  render();
+})();
+</script>
+
+</body></html>
