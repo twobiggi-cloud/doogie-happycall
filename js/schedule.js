@@ -79,7 +79,9 @@ export function hasPastCall(calls, today) {
 
 export function decideNoAnswer(call, ctx) {
   const noAnswerCount = call.noAnswerCount + 1;
-  const next = nextCallDayAfter(ctx.today);
+  const nextCallDay = nextCallDayAfter(ctx.today);
+  // 예정일 전에 부재 처리해도 콜을 앞당기지 않는다(미룬다).
+  const next = call.dueOn && call.dueOn > nextCallDay ? call.dueOn : nextCallDay;
   if (call.kind === 'mid') {
     // 소진 전 콜이 곧 이어받으므로 문자 없이 마감한다. 3회째와 겹쳐도 이쪽이 우선이다.
     if (next >= ctx.preRunoutDueOn) return { status: 'closed_no_answer', dueOn: null, noAnswerCount };

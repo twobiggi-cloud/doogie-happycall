@@ -176,3 +176,15 @@ test('overdueDays는 지난 날수, 미래면 0', () => {
   assert.equal(overdueDays('2026-09-13', '2026-09-15'), 2);
   assert.equal(overdueDays('2026-09-16', '2026-09-15'), 0);
 });
+
+test('예정일 전 부재는 예정일을 앞당기지 않는다', () => {
+  assert.deepEqual(
+    decideNoAnswer({ kind: 'pre_runout', noAnswerCount: 0, dueOn: '2026-10-12' }, { today: '2026-09-15', runoutOn: '2026-10-15' }),
+    { status: 'pending', dueOn: '2026-10-12', noAnswerCount: 1 },
+  );
+  assert.deepEqual(
+    decideNoAnswer({ kind: 'mid', noAnswerCount: 0, dueOn: '2026-09-30' },
+      { today: '2026-09-15', runoutOn: '2026-10-15', preRunoutDueOn: '2026-10-12' }),
+    { status: 'pending', dueOn: '2026-09-30', noAnswerCount: 1 },
+  );
+});
