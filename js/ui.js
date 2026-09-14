@@ -71,17 +71,25 @@ export async function refresh() {
   }
 }
 
+let saving = false;
+
 export async function run(action, successMsg) {
+  if (saving) return false;
+  saving = true;
   try {
-    await action();
-  } catch (err) {
-    console.error(err);
-    toast('저장하지 못했어요. 다시 시도해주세요.');
-    return false;
+    try {
+      await action();
+    } catch (err) {
+      console.error(err);
+      toast('저장하지 못했어요. 다시 시도해주세요.');
+      return false;
+    }
+    if (successMsg) toast(successMsg);
+    await refresh();
+    return true;
+  } finally {
+    saving = false;
   }
-  if (successMsg) toast(successMsg);
-  await refresh();
-  return true;
 }
 
 // ---- 배지 ----
