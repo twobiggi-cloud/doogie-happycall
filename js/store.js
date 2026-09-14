@@ -60,3 +60,65 @@ export async function loadScripts() {
   check(error);
   return Object.fromEntries(data.map((r) => [r.key, r.text]));
 }
+
+// ---- 쓰기 ----
+
+export async function findPatientByPhone(phone) {
+  const { data, error } = await supabase
+    .from('patients')
+    .select('id, name, condition, condition_label')
+    .eq('phone', phone)
+    .maybeSingle();
+  check(error);
+  return data ? { id: data.id, name: data.name, condition: data.condition, conditionLabel: data.condition_label ?? '' } : null;
+}
+
+export async function registerPrescription({ phone, name, condition, conditionLabel, prescribedOn, days, runoutOn, calls }) {
+  const { data, error } = await supabase.rpc('register_prescription', {
+    p_phone: phone,
+    p_name: name,
+    p_condition: condition,
+    p_condition_label: conditionLabel ?? '',
+    p_prescribed_on: prescribedOn,
+    p_days: days,
+    p_runout_on: runoutOn,
+    p_calls: calls,
+  });
+  check(error);
+  return data;
+}
+
+export async function saveCallOutcome(callId, o) {
+  const { error } = await supabase.rpc('save_call_outcome', {
+    p_call_id: callId,
+    p_outcome: o.outcome ?? null,
+    p_note: o.note ?? '',
+    p_staff_name: o.staffName ?? '',
+    p_status: o.status,
+    p_due_on: o.dueOn ?? null,
+    p_no_answer_count: o.noAnswerCount,
+    p_result: o.result ?? null,
+    p_visit_needed: o.visitNeeded,
+    p_escalation: o.escalation,
+    p_close_prescription: o.closePrescription ?? null,
+  });
+  check(error);
+}
+
+export async function markEscalationSent(callId) {
+  const { error } = await supabase
+    .from('calls')
+    .update({ escalation: 'sent', escalated_at: new Date().toISOString() })
+    .eq('id', callId);
+  check(error);
+}
+
+export async function markVisitBooked(callId) {
+  const { error } = await supabase.from('calls').update({ visit_booked: true }).eq('id', callId);
+  check(error);
+}
+
+export async function saveScript(key, text) {
+  const { error } = await supabase.from('scripts').upsert({ key, text, updated_at: new Date().toISOString() });
+  check(error);
+}

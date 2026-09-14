@@ -1,11 +1,15 @@
 import * as store from './store.js';
-import { todayYMD, overdueDays } from './schedule.js';
 import {
-  todayCalls, upcomingCalls, escalationCalls, visitCalls, activePrescriptionCount,
+  todayYMD, overdueDays, planCalls, hasPastCall, decideNoAnswer, decideSmsSent, decideAnswered,
+  defaultVisitNeededFor,
+} from './schedule.js';
+import {
+  todayCalls, upcomingCalls, escalationCalls, visitCalls, activePrescriptionCount, preRunoutCall,
 } from './model.js';
 import {
-  RESULT_LABELS, KIND_LABELS, CALL_STATUS_LABELS, DEFAULT_SCRIPTS,
-  normalizePhone, formatPhone, conditionText, formatKoreanDate,
+  CONDITION_LABELS, RESULT_LABELS, KIND_LABELS, CALL_STATUS_LABELS, DAYS_PRESETS, DEFAULT_SCRIPTS,
+  normalizePhone, isValidPhone, formatPhone, isValidDays, conditionText, formatKoreanDate,
+  fillTemplate, buildEscalationText, buildCallScript,
 } from './texts.js';
 
 const TABS = ['escalation', 'today', 'visit', 'all', 'scripts'];
@@ -338,6 +342,289 @@ export function openDetailModal(patient) {
   state.detailPatientId = patient.id;
 }
 
+export async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    toast('복사했어요.');
+  } catch {
+    toast('복사하지 못했어요. 글자를 직접 선택해 복사해주세요.');
+  }
+}
+
+function pillGroup(id, entries, selected) {
+  return `<div class="pill-group" id="${id}">${entries.map(([value, label]) =>
+    `<button type="button" class="pill-opt${String(value) === String(selected) ? ' selected' : ''}" data-val="${value}">${label}</button>`).join('')}</div>`;
+}
+
+function selectPill(groupId, value) {
+  document.querySelectorAll(`#${groupId} .pill-opt`).forEach((b) => b.classList.toggle('selected', b.dataset.val === String(value)));
+}
+
+// ---- 처방 등록 ----
+
+export function openRegisterModal() {
+  const today = todayYMD();
+  const form = { condition: 'urticaria', existing: null, lookup: 0 };
+
+  openModal(`
+    <div class="modal-head">
+      <div><h2>처방 등록</h2><div class="sub">전화번호부터 넣으면 기존 환자인지 바로 알려드려요.</div></div>
+      <button class="close-x" data-action="close">✕</button>
+    </div>
+    <div class="field">
+      <label>전화번호 *</label>
+      <input type="tel" id="rg-phone" inputmode="numeric" placeholder="01012345678">
+      <span class="existing-note" id="rg-existing"></span>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>환자명 *</label><input type="text" id="rg-name" maxlength="50"></div>
+      <div class="field"><label>증상</label>${pillGroup('rg-condition', Object.entries(CONDITION_LABELS), form.condition)}</div>
+    </div>
+    <div class="field" id="rg-other-field" hidden><label>기타 증상 이름</label><input type="text" id="rg-other" placeholder="예: 아토피"></div>
+    <div class="field-row">
+      <div class="field"><label>처방일</label><input type="date" id="rg-date" value="${today}"></div>
+      <div class="field">
+        <label>처방 일수 *</label>
+        ${pillGroup('rg-days-presets', DAYS_PRESETS.map((d) => [d, `${d}일`]), 30)}
+        <input type="number" id="rg-days" min="1" max="90" value="30">
+      </div>
+    </div>
+    <div id="rg-preview"></div>
+    <div class="modal-footer">
+      <button class="btn" data-action="close">취소</button>
+      <button class="btn btn-primary" id="rg-submit">등록</button>
+    </div>`);
+
+  const setCondition = (condition, locked) => {
+    form.condition = condition;
+    selectPill('rg-condition', condition);
+    $('rg-other-field').hidden = condition !== 'other';
+    document.querySelectorAll('#rg-condition .pill-opt').forEach((b) => { b.disabled = locked; });
+  };
+
+  const readPlan = () => {
+    const days = Number($('rg-days').value);
+    const date = $('rg-date').value;
+    if (!date || !isValidDays(days)) return null;
+    return { date, days, plan: planCalls(date, days) };
+  };
+
+  const updatePreview = () => {
+    const read = readPlan();
+    if (!read) {
+      $('rg-preview').innerHTML = '<div class="preview-box warn">처방일을 넣고, 처방 일수는 1~90일로 넣어주세요.</div>';
+      return;
+    }
+    const lines = read.plan.calls.map((c) => `${KIND_LABELS[c.kind]} ${formatKoreanDate(c.dueOn)}`).join(', ');
+    let html = `<div class="preview-box">소진일 ${formatKoreanDate(read.plan.runoutOn)} · ${lines}</div>`;
+    if (hasPastCall(read.plan.calls, today)) {
+      html += '<div class="preview-box warn">이미 지난 콜 날짜가 있어요. 저장하면 바로 지연으로 떠요.</div>';
+    }
+    $('rg-preview').innerHTML = html;
+  };
+
+  $('rg-phone').addEventListener('input', async () => {
+    const phone = normalizePhone($('rg-phone').value);
+    const token = ++form.lookup;
+    form.existing = null;
+    $('rg-existing').textContent = '';
+    $('rg-name').disabled = false;
+    setCondition(form.condition, false);
+    if (!isValidPhone(phone)) return;
+    try {
+      const found = await store.findPatientByPhone(phone);
+      if (token !== form.lookup || !found) return;
+      form.existing = found;
+      $('rg-name').value = found.name;
+      $('rg-name').disabled = true;
+      $('rg-other').value = found.conditionLabel;
+      setCondition(found.condition, true);
+      $('rg-existing').textContent = '기존 환자예요. 새 처방만 추가돼요.';
+    } catch (err) {
+      console.error(err);
+    }
+  });
+
+  $('rg-condition').addEventListener('click', (e) => {
+    const b = e.target.closest('.pill-opt');
+    if (b && !b.disabled) setCondition(b.dataset.val, false);
+  });
+
+  $('rg-days-presets').addEventListener('click', (e) => {
+    const b = e.target.closest('.pill-opt');
+    if (!b) return;
+    $('rg-days').value = b.dataset.val;
+    selectPill('rg-days-presets', b.dataset.val);
+    updatePreview();
+  });
+
+  $('rg-days').addEventListener('input', () => { selectPill('rg-days-presets', $('rg-days').value); updatePreview(); });
+  $('rg-date').addEventListener('input', updatePreview);
+  updatePreview();
+
+  $('rg-submit').addEventListener('click', async () => {
+    const phone = normalizePhone($('rg-phone').value);
+    const name = $('rg-name').value.trim();
+    const read = readPlan();
+    if (!isValidPhone(phone)) { toast('전화번호는 숫자 10~11자리로 넣어주세요.'); return; }
+    if (!form.existing && !name) { toast('환자명을 넣어주세요.'); return; }
+    if (!read) { toast('처방일과 처방 일수(1~90일)를 확인해주세요.'); return; }
+    const ok = await run(() => store.registerPrescription({
+      phone,
+      name: form.existing ? form.existing.name : name,
+      condition: form.condition,
+      conditionLabel: form.condition === 'other' ? $('rg-other').value.trim() : '',
+      prescribedOn: read.date,
+      days: read.days,
+      runoutOn: read.plan.runoutOn,
+      calls: read.plan.calls,
+    }), form.existing ? '기존 환자에 처방을 추가했어요.' : '등록했어요.');
+    if (ok) closeModal();
+  });
+}
+
+// ---- 통화 기록 ----
+
+export function openCallModal(view) {
+  if (!view) return;
+  const { patient, prescription, call } = view;
+  const script = buildCallScript({
+    condition: patient.condition, kind: call.kind, name: patient.name,
+    runoutOn: prescription.runoutOn, scripts: scriptsWithDefaults(),
+  });
+  let result = 'improved';
+
+  openModal(`
+    <div class="modal-head">
+      <div>
+        <h2>통화 기록 · ${esc(patient.name)}</h2>
+        <div class="sub">${esc(formatPhone(patient.phone))} · ${KIND_LABELS[call.kind]} · 소진 ${formatKoreanDate(prescription.runoutOn)}</div>
+      </div>
+      <button class="close-x" data-action="close">✕</button>
+    </div>
+    <div class="script-view">${esc(script)}</div>
+    <div class="field">
+      <label>증상 상태</label>
+      ${pillGroup('cl-result', Object.entries(RESULT_LABELS), result)}
+      <span class="field-hint" id="cl-worse-hint" hidden>악화로 저장하면 '원장 전달 필요'에 올라가요.</span>
+    </div>
+    <div class="field"><label>통화 메모</label><textarea id="cl-note" placeholder="증상 경과, 특이사항"></textarea></div>
+    <div class="field"><label class="checkbox-row"><input type="checkbox" id="cl-visit"> 내원 예약이 필요해요</label></div>
+    <div class="field"><label class="checkbox-row"><input type="checkbox" id="cl-close-early"> 이 처방 조기 마감 (복용 중단 등)</label></div>
+    <div class="field"><label>담당 직원</label><input type="text" id="cl-staff" value="${esc(state.staffName)}"></div>
+    <div class="modal-footer">
+      <button class="btn" data-action="close">취소</button>
+      <button class="btn btn-primary" id="cl-submit">저장</button>
+    </div>`, true);
+
+  $('cl-result').addEventListener('click', (e) => {
+    const b = e.target.closest('.pill-opt');
+    if (!b) return;
+    result = b.dataset.val;
+    selectPill('cl-result', result);
+    $('cl-worse-hint').hidden = result !== 'worse';
+    if (defaultVisitNeededFor(result)) $('cl-visit').checked = true;
+  });
+
+  $('cl-submit').addEventListener('click', async () => {
+    state.staffName = $('cl-staff').value.trim();
+    const d = decideAnswered(call, {
+      result,
+      note: $('cl-note').value.trim(),
+      visitNeeded: $('cl-visit').checked,
+      closeEarly: $('cl-close-early').checked,
+    });
+    const ok = await run(() => store.saveCallOutcome(call.id, {
+      outcome: 'answered', note: d.note, staffName: state.staffName, status: d.status, dueOn: null,
+      noAnswerCount: call.noAnswerCount, result: d.result, visitNeeded: d.visitNeeded,
+      escalation: d.escalation, closePrescription: d.closePrescription,
+    }), d.escalation === 'pending' ? "저장했어요. '원장 전달 필요'에 올라갔어요." : '저장했어요.');
+    if (ok) closeModal();
+  });
+}
+
+// ---- 부재중 ----
+
+export async function handleNoAnswer(view) {
+  if (!view) return;
+  const { prescription, call } = view;
+  const pre = preRunoutCall(prescription);
+  const d = decideNoAnswer(call, {
+    today: todayYMD(),
+    runoutOn: prescription.runoutOn,
+    preRunoutDueOn: pre ? pre.dueOn : prescription.runoutOn,
+  });
+  const message = {
+    pending: d.dueOn ? `${formatKoreanDate(d.dueOn)}에 다시 뜨게 했어요.` : '',
+    closed_no_answer: '중간 콜을 마감했어요. 소진 전 콜이 이어받아요.',
+    sms_pending: '',
+  }[d.status];
+  const ok = await run(() => store.saveCallOutcome(call.id, {
+    outcome: 'no_answer', note: '', staffName: state.staffName, status: d.status, dueOn: d.dueOn,
+    noAnswerCount: d.noAnswerCount, result: null, visitNeeded: call.visitNeeded,
+    escalation: call.escalation, closePrescription: null,
+  }), message);
+  if (ok && d.status === 'sms_pending') openSmsModal(findView(call.id));
+}
+
+// ---- 부재 문자 ----
+
+export function openSmsModal(view) {
+  if (!view) return;
+  const { patient, call } = view;
+  const text = fillTemplate(scriptsWithDefaults().sms_no_answer, { name: patient.name });
+
+  openModal(`
+    <div class="modal-head">
+      <div><h2>부재 안내 문자 · ${esc(patient.name)}</h2><div class="sub">${esc(formatPhone(patient.phone))} · 부재 ${call.noAnswerCount}회</div></div>
+      <button class="close-x" data-action="close">✕</button>
+    </div>
+    <textarea class="copy-box" id="sms-text">${esc(text)}</textarea>
+    <p class="field-hint">복사해서 문자로 보낸 뒤 '문자 보냈음'을 눌러주세요. 그냥 닫으면 오늘 목록에 '문자 대기'로 남아요.</p>
+    <div class="modal-footer">
+      <button class="btn" id="sms-copy">복사</button>
+      <button class="btn btn-primary" id="sms-sent">문자 보냈음</button>
+    </div>`);
+
+  $('sms-copy').addEventListener('click', () => copyText($('sms-text').value));
+  $('sms-sent').addEventListener('click', async () => {
+    const d = decideSmsSent(call);
+    const ok = await run(() => store.saveCallOutcome(call.id, {
+      outcome: null, note: '', staffName: state.staffName, status: d.status, dueOn: null,
+      noAnswerCount: call.noAnswerCount, result: null, visitNeeded: call.visitNeeded,
+      escalation: call.escalation, closePrescription: d.closePrescription,
+    }), '문자 보냄으로 마감했어요.');
+    if (ok) closeModal();
+  });
+}
+
+// ---- 원장 전달 ----
+
+export function openEscalationModal(view) {
+  if (!view) return;
+  const { patient, call } = view;
+  const text = buildEscalationText({
+    name: patient.name, condition: patient.condition, conditionLabel: patient.conditionLabel, note: call.note,
+  });
+
+  openModal(`
+    <div class="modal-head">
+      <div><h2>원장 전달 · ${esc(patient.name)}</h2><div class="sub">한의사랑 메신저에 붙여넣어 주세요</div></div>
+      <button class="close-x" data-action="close">✕</button>
+    </div>
+    <textarea class="copy-box" id="esc-text">${esc(text)}</textarea>
+    <div class="modal-footer">
+      <button class="btn" id="esc-copy">복사</button>
+      <button class="btn btn-primary" id="esc-sent">메신저로 전달함</button>
+    </div>`);
+
+  $('esc-copy').addEventListener('click', () => copyText($('esc-text').value));
+  $('esc-sent').addEventListener('click', async () => {
+    const ok = await run(() => store.markEscalationSent(call.id), '전달 완료로 표시했어요.');
+    if (ok) closeModal();
+  });
+}
+
 // ---- 버튼 ----
 
 export function onAppClick(e) {
@@ -347,6 +634,12 @@ export function onAppClick(e) {
   const { action, id } = btn.dataset;
   if (action === 'close') closeModal();
   if (action === 'detail') openDetailModal(findPatient(id));
+  if (action === 'call') openCallModal(findView(id));
+  if (action === 'no-answer') handleNoAnswer(findView(id));
+  if (action === 'sms') openSmsModal(findView(id));
+  if (action === 'escalate') openEscalationModal(findView(id));
+  if (action === 'visit-booked') run(() => store.markVisitBooked(id), '예약 완료로 표시했어요.');
+  if (action === 'save-script') run(() => store.saveScript(id, $(`script-${id}`).value), '스크립트를 저장했어요.');
 }
 
 let bound = false;
@@ -355,6 +648,7 @@ export function startApp() {
   if (!bound) {
     document.querySelectorAll('.tab-btn').forEach((b) => b.addEventListener('click', () => { state.tab = b.dataset.tab; render(); }));
     $('btn-sign-out').addEventListener('click', () => store.signOut());
+    $('btn-open-register').addEventListener('click', openRegisterModal);
     $('app').addEventListener('click', onAppClick);
     $('modal-root').addEventListener('click', onAppClick);
     bound = true;
