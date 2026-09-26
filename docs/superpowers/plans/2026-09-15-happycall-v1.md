@@ -29,7 +29,7 @@
 - 기존 화면과 색은 그대로 둔다.
 - 이번 주는 예시 환자로만 검증한다. 실제 환자 정보는 넣지 않는다.
 - Supabase 프로젝트는 `yblqrtwbvqrshqmnizij`(twobiggi-cloud's Project)다. 스키마 001·002는 이미 적용돼 있다.
-- 로그인은 이메일 매직 링크, 허용 이메일은 `twobiggi@gmail.com` 하나다. 앱 사용자 생성과 신규 가입 차단은 끝나 있다.
+- 로그인은 이메일 매직 링크, 허용 이메일은 `allowed_emails` 표에 등록된 계정 하나다. 앱 사용자 생성과 신규 가입 차단은 끝나 있다.
 - 앱에는 publishable 키만 넣는다. `service_role` 키는 저장소·앱 어디에도 넣지 않는다.
 - 날짜는 브라우저 로컬(한국 시간) 기준 `YYYY-MM-DD` 문자열로 다룬다.
 - 빌드 단계를 두지 않는다. 외부 연동은 Supabase와 Vercel뿐이다. 한의사랑·카카오·문자 자동 발송은 연동하지 않는다.
@@ -976,7 +976,7 @@ SQL 테스트에서 허용 이메일 사용자로 실행할 때는 쿼리 앞에
 
 ```sql
 set local role authenticated;
-select set_config('request.jwt.claims', '{"role":"authenticated","email":"twobiggi@gmail.com"}', true);
+select set_config('request.jwt.claims', '{"role":"authenticated","email":"allowed@example.com"}', true);
 ```
 
 - [ ] **Step 1: 이미 적용된 마이그레이션 사본을 저장소로 옮기기**
@@ -995,7 +995,7 @@ MCP `execute_sql`:
 
 ```sql
 set local role authenticated;
-select set_config('request.jwt.claims', '{"role":"authenticated","email":"twobiggi@gmail.com"}', true);
+select set_config('request.jwt.claims', '{"role":"authenticated","email":"allowed@example.com"}', true);
 select public.register_prescription('01000000000', '테스트A', 'urticaria', '', date '2026-09-15', 30, date '2026-10-15',
   '[{"kind":"mid","dueOn":"2026-09-30"},{"kind":"pre_runout","dueOn":"2026-10-12"}]'::jsonb);
 ```
@@ -1130,7 +1130,7 @@ Expected: 2행 — `(테스트A, 30, 2026-10-15, mid, 2026-09-30, pending)`, `(�
 
 ```sql
 set local role authenticated;
-select set_config('request.jwt.claims', '{"role":"authenticated","email":"twobiggi@gmail.com"}', true);
+select set_config('request.jwt.claims', '{"role":"authenticated","email":"allowed@example.com"}', true);
 select public.register_prescription('01000000000', '다른이름', 'cough', '', date '2026-10-16', 15, date '2026-10-31',
   '[{"kind":"pre_runout","dueOn":"2026-10-28"}]'::jsonb);
 select (select count(*) from patients where phone = '01000000000') as patients,
@@ -1155,7 +1155,7 @@ Expected: ERROR `new row violates row-level security policy for table "patients"
 
 ```sql
 set local role authenticated;
-select set_config('request.jwt.claims', '{"role":"authenticated","email":"twobiggi@gmail.com"}', true);
+select set_config('request.jwt.claims', '{"role":"authenticated","email":"allowed@example.com"}', true);
 select public.save_call_outcome(
   (select c.id from calls c join prescriptions r on r.id = c.prescription_id join patients p on p.id = r.patient_id
    where p.phone = '01000000000' and r.days = 30 and c.kind = 'mid'),
@@ -1172,7 +1172,7 @@ Expected: `(done, worse, 가려움 심해짐, true, pending, true, 1, active)`
 
 ```sql
 set local role authenticated;
-select set_config('request.jwt.claims', '{"role":"authenticated","email":"twobiggi@gmail.com"}', true);
+select set_config('request.jwt.claims', '{"role":"authenticated","email":"allowed@example.com"}', true);
 select public.save_call_outcome(
   (select c.id from calls c join prescriptions r on r.id = c.prescription_id join patients p on p.id = r.patient_id
    where p.phone = '01000000000' and r.days = 30 and c.kind = 'pre_runout'),
@@ -1188,7 +1188,7 @@ Expected: `(pending, 2026-10-13, 1, null, 1)`
 
 ```sql
 set local role authenticated;
-select set_config('request.jwt.claims', '{"role":"authenticated","email":"twobiggi@gmail.com"}', true);
+select set_config('request.jwt.claims', '{"role":"authenticated","email":"allowed@example.com"}', true);
 select public.save_call_outcome(
   (select c.id from calls c join prescriptions r on r.id = c.prescription_id join patients p on p.id = r.patient_id
    where p.phone = '01000000000' and r.days = 30 and c.kind = 'pre_runout'),
@@ -1205,7 +1205,7 @@ Expected: `(closed_no_answer, true, 1, closed, completed)`
 
 ```sql
 set local role authenticated;
-select set_config('request.jwt.claims', '{"role":"authenticated","email":"twobiggi@gmail.com"}', true);
+select set_config('request.jwt.claims', '{"role":"authenticated","email":"allowed@example.com"}', true);
 select public.save_call_outcome(
   (select c.id from calls c join prescriptions r on r.id = c.prescription_id join patients p on p.id = r.patient_id
    where p.phone = '01000000000' and r.days = 15 and c.kind = 'pre_runout'),
@@ -1955,7 +1955,7 @@ insert into public.calls (prescription_id, kind, due_on)
 select r.id, 'pre_runout', d.due from r, d returning due_on;
 ```
 
-4. 사용자에게 요청: 본인 Chrome에서 `http://localhost:5173`을 열고 `twobiggi@gmail.com`으로 "로그인 링크 받기" → 메일의 링크 클릭.
+4. 사용자에게 요청: 본인 Chrome에서 `http://localhost:5173`을 열고 허용된 이메일로 "로그인 링크 받기" → 메일의 링크 클릭.
 5. Claude in Chrome 도구(`tabs_context_mcp`, `read_page`, `find`, `computer`)로 그 탭을 확인한다. Expected:
    - 통계 "오늘 콜" 1, "진행 중 처방" 1
    - "오늘 콜" 탭에 "홍길동 (화면확인)" 카드, 배지 "두드러기", "소진 전 콜", "오늘" 또는 "1일 지연"
