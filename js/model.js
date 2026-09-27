@@ -1,5 +1,5 @@
 // Supabase에서 받은 행을 화면이 쓰는 모양으로 바꾸고, 탭별 목록을 고른다.
-import { isOnTodayList, addDays } from './schedule.js';
+import { isOnTodayList, addDays, isShipmentOverdue } from './schedule.js';
 
 const newestFirst = (key) => (a, b) => (a[key] < b[key] ? 1 : a[key] > b[key] ? -1 : 0);
 
@@ -31,6 +31,7 @@ function toPrescription(r, patientId) {
     id: r.id,
     patientId,
     prescribedOn: r.prescribed_on,
+    shippedOn: r.shipped_on ?? null,
     days: r.days,
     runoutOn: r.runout_on,
     status: r.status,
@@ -93,4 +94,16 @@ export function preRunoutCall(prescription) {
 
 export function activePrescriptionCount(patients) {
   return patients.reduce((n, p) => n + p.prescriptions.filter((r) => r.status === 'active').length, 0);
+}
+
+// 약이 아직 나가지 않아 콜이 잡히지 않은 처방. 여기를 비워두면 그 환자는 해피콜에서 사라진다.
+export function awaitingShipment(patients, today) {
+  const rows = [];
+  for (const patient of patients) {
+    for (const prescription of patient.prescriptions) {
+      if (prescription.status !== 'active' || prescription.shippedOn) continue;
+      rows.push({ patient, prescription, overdue: isShipmentOverdue(prescription.prescribedOn, today) });
+    }
+  }
+  return rows.sort((a, b) => (a.prescription.prescribedOn < b.prescription.prescribedOn ? -1 : 1));
 }

@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   toPatient, callViews, todayCalls, upcomingCalls, escalationCalls, visitCalls,
-  preRunoutCall, activePrescriptionCount,
+  preRunoutCall, activePrescriptionCount, awaitingShipment,
 } from '../js/model.js';
 
 const row = {
@@ -78,4 +78,27 @@ test('preRunoutCall과 진행 중 처방 수', () => {
   const p = toPatient(row);
   assert.equal(preRunoutCall(p.prescriptions[0]).id, 'c2');
   assert.equal(activePrescriptionCount([p]), 1);
+});
+
+test('발송 대기 목록은 발송일이 없는 진행 중 처방만, 오래된 것부터', () => {
+  const patients = [
+    {
+      id: 'p1', name: '가환자', phone: '01011110001', condition: 'cough', conditionLabel: '',
+      prescriptions: [
+        { id: 'r1', prescribedOn: '2026-09-20', shippedOn: null, days: 30, runoutOn: null, status: 'active', calls: [] },
+        { id: 'r2', prescribedOn: '2026-09-26', shippedOn: '2026-09-26', days: 30, runoutOn: '2026-10-26', status: 'active', calls: [] },
+      ],
+    },
+    {
+      id: 'p2', name: '나환자', phone: '01011110002', condition: 'cough', conditionLabel: '',
+      prescriptions: [
+        { id: 'r3', prescribedOn: '2026-09-25', shippedOn: null, days: 7, runoutOn: null, status: 'active', calls: [] },
+        { id: 'r4', prescribedOn: '2026-09-01', shippedOn: null, days: 7, runoutOn: null, status: 'closed', calls: [] },
+      ],
+    },
+  ];
+  const rows = awaitingShipment(patients, '2026-09-27');
+  assert.deepEqual(rows.map((v) => v.prescription.id), ['r1', 'r3']);
+  assert.equal(rows[0].overdue, true);  // 9월 20일 처방, 7일 지남
+  assert.equal(rows[1].overdue, false); // 9월 25일 처방, 2일 지남
 });

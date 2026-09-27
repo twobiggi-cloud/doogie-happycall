@@ -4,7 +4,7 @@ export const CONDITION_LABELS = { urticaria: '두드러기', cough: '기침', ot
 export const RESULT_LABELS = { improved: '호전', same: '유지', worse: '악화', unknown: '판단보류' };
 export const KIND_LABELS = { mid: '중간 콜', pre_runout: '소진 전 콜' };
 export const CALL_STATUS_LABELS = { pending: '대기', done: '완료', sms_pending: '문자 대기', closed_no_answer: '부재 마감' };
-export const DAYS_PRESETS = [30, 15, 10];
+export const DAYS_PRESETS = [30, 15, 10, 7];
 
 export const DEFAULT_SCRIPTS = {
   urticaria: `안녕하세요, {name}님. 두기한의원입니다. 처방해드린 약 잘 드시고 계신지 확인차 연락드렸어요. 통화 잠시 괜찮으실까요?

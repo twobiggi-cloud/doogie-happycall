@@ -5,8 +5,8 @@ import {
   conditionText, formatKoreanDate, fillTemplate, buildEscalationText, buildCallScript, staffLabel,
 } from '../js/texts.js';
 
-test('처방 일수 버튼은 30, 15, 10', () => {
-  assert.deepEqual(DAYS_PRESETS, [30, 15, 10]);
+test('처방 일수 버튼은 30, 15, 10, 7', () => {
+  assert.deepEqual(DAYS_PRESETS, [30, 15, 10, 7]);
 });
 
 test('전화번호는 숫자만 남긴다', () => {
