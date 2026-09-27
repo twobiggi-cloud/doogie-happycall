@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  DAYS_PRESETS, DEFAULT_SCRIPTS, normalizePhone, isValidPhone, formatPhone, isValidDays,
+  DAYS_PRESETS, DEFAULT_SCRIPTS, KIND_LABELS, normalizePhone, isValidPhone, formatPhone, isValidDays,
   conditionText, formatKoreanDate, fillTemplate, buildEscalationText, buildCallScript, staffLabel, RELATION_LABELS, patientLabel, addressName,
 } from '../js/texts.js';
 
@@ -102,4 +102,8 @@ test('본인이면 이름만, 아니면 관계를 붙인다', () => {
 test('본인이 아니면 보호자를 부른다', () => {
   assert.equal(addressName({ name: '홍길동', relation: 'self' }), '홍길동');
   assert.equal(addressName({ name: '홍아이', relation: 'child' }), '홍아이님 보호자');
+});
+
+test('콜 종류 이름에 재시도 콜이 있다', () => {
+  assert.equal(KIND_LABELS.retry, '재시도 콜');
 });

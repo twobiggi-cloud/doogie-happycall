@@ -263,3 +263,22 @@ test('날짜 경고는 쉬는 요일과 소진일 이후', () => {
   assert.equal(dueDateWarning('2026-10-20', '2026-10-20'), null);
   assert.equal(dueDateWarning('2026-10-20', null), null);
 });
+
+test('재시도 콜은 소진일이 지나도 바로 마감하지 않는다', () => {
+  assert.deepEqual(
+    decideNoAnswer({ kind: 'retry', noAnswerCount: 0, dueOn: '2026-10-12' }, { today: '2026-10-12', runoutOn: '2026-09-30' }),
+    { status: 'pending', dueOn: '2026-10-13', noAnswerCount: 1 },
+  );
+});
+
+test('재시도 콜도 부재 3회면 문자로 마감한다', () => {
+  assert.deepEqual(
+    decideNoAnswer({ kind: 'retry', noAnswerCount: 2, dueOn: '2026-10-12' }, { today: '2026-10-12', runoutOn: '2026-09-30' }),
+    { status: 'sms_pending', dueOn: null, noAnswerCount: 3 },
+  );
+});
+
+test('재시도 콜에서 통화가 되면 진행 중인 처방을 마감한다', () => {
+  const out = decideAnswered({ kind: 'retry' }, { result: 'improved', note: '', visitNeeded: false, closeEarly: false });
+  assert.equal(out.closePrescription, 'completed');
+});

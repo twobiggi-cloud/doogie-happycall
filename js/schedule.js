@@ -101,7 +101,9 @@ export function decideNoAnswer(call, ctx) {
     if (noAnswerCount >= MAX_NO_ANSWER) return { status: 'sms_pending', dueOn: null, noAnswerCount };
     return { status: 'pending', dueOn: next, noAnswerCount };
   }
-  if (noAnswerCount >= MAX_NO_ANSWER || next >= ctx.runoutOn) {
+  // 재시도 콜은 소진일이 지난 뒤에 거는 콜이라 소진일 기준으로 앞당겨 마감하지 않는다.
+  const pastRunout = call.kind === 'pre_runout' && next >= ctx.runoutOn;
+  if (noAnswerCount >= MAX_NO_ANSWER || pastRunout) {
     return { status: 'sms_pending', dueOn: null, noAnswerCount };
   }
   return { status: 'pending', dueOn: next, noAnswerCount };
@@ -114,7 +116,7 @@ export function decideSmsSent(call) {
 export function decideAnswered(call, input) {
   let closePrescription = null;
   if (input.closeEarly) closePrescription = 'early';
-  else if (call.kind === 'pre_runout') closePrescription = 'completed';
+  else if (call.kind === 'pre_runout' || call.kind === 'retry') closePrescription = 'completed';
   return {
     status: 'done',
     result: input.result,
