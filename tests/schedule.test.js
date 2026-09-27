@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   addDays, daysBetween, isoDay, isCallDay, pullBackToCallDay, nextCallDayAfter, todayYMD,
   runoutOn, planCalls, hasPastCall, decideNoAnswer, decideSmsSent, decideAnswered,
-  defaultVisitNeededFor, isOnTodayList, overdueDays,
+  defaultVisitNeededFor, isOnTodayList, overdueDays, preRunoutOffsetFor, isShipmentOverdue,
 } from '../js/schedule.js';
 
 test('addDays는 달이 바뀌어도 맞게 센다', () => {
@@ -79,9 +79,11 @@ test('10일 처방에서 목요일에 걸린 소진 전 콜은 수요일로 당�
   });
 });
 
-test('콜이 처방일보다 앞서면 처방일로, 처방일이 쉬는 요일이면 다음 콜 요일로', () => {
-  assert.equal(planCalls('2026-09-15', 2).calls[0].dueOn, '2026-09-15');
-  assert.equal(planCalls('2026-09-20', 3).calls[0].dueOn, '2026-09-21');
+test('콜이 발송일보다 앞서면 발송일로, 발송일이 쉬는 요일이면 다음 콜 요일로', () => {
+  // 2026-09-15(화) 발송 2일분 → 소진 09-17 → 1일 전 09-16(수)
+  assert.equal(planCalls('2026-09-15', 2).calls[0].dueOn, '2026-09-16');
+  // 2026-09-20(일) 발송 1일분 → 소진 09-21 → 1일 전 09-20(일)은 쉬는 날이고 발송일보다 앞설 수 없어 09-21(월)
+  assert.equal(planCalls('2026-09-20', 1).calls[0].dueOn, '2026-09-21');
 });
 
 test('hasPastCall은 오늘보다 앞선 콜이 있으면 참', () => {
@@ -187,4 +189,45 @@ test('예정일 전 부재는 예정일을 앞당기지 않는다', () => {
       { today: '2026-09-15', runoutOn: '2026-10-15', preRunoutDueOn: '2026-10-12' }),
     { status: 'pending', dueOn: '2026-09-30', noAnswerCount: 1 },
   );
+});
+
+test('7일 이하 처방은 소진 1일 전, 8일 이상은 소진 3일 전', () => {
+  assert.equal(preRunoutOffsetFor(7), 1);
+  assert.equal(preRunoutOffsetFor(10), 3);
+  assert.equal(preRunoutOffsetFor(30), 3);
+});
+
+test('7일분은 발송 엿새째에 걸고, 목·일이면 당긴다', () => {
+  // 2026-10-05(월) 발송 → 소진 10-12(월) → 1일 전 10-11(일) → 토요일로 당김
+  const plan = planCalls('2026-10-05', 7);
+  assert.equal(plan.runoutOn, '2026-10-12');
+  assert.deepEqual(plan.calls, [{ kind: 'pre_runout', dueOn: '2026-10-10' }]);
+});
+
+test('10일분은 소진 3일 전 그대로, 중간 콜은 없다', () => {
+  const plan = planCalls('2026-10-05', 10);
+  assert.equal(plan.runoutOn, '2026-10-15');
+  assert.deepEqual(plan.calls, [{ kind: 'pre_runout', dueOn: '2026-10-12' }]);
+});
+
+test('30일분은 발송일 기준으로 중간 콜과 소진 전 콜을 잡는다', () => {
+  // 발송 10-05(월) → 소진 11-04(수), 중간 10-20(화), 소진 전 11-01(일) → 10-31(토)
+  const plan = planCalls('2026-10-05', 30);
+  assert.equal(plan.runoutOn, '2026-11-04');
+  assert.deepEqual(plan.calls, [
+    { kind: 'mid', dueOn: '2026-10-20' },
+    { kind: 'pre_runout', dueOn: '2026-10-31' },
+  ]);
+});
+
+test('발송일이 처방일보다 늦어도 콜은 발송일 기준으로 잡힌다', () => {
+  const plan = planCalls('2026-10-08', 7); // 목요일 발송 → 소진 10-15(목) → 1일 전 10-14(수)
+  assert.equal(plan.runoutOn, '2026-10-15');
+  assert.deepEqual(plan.calls, [{ kind: 'pre_runout', dueOn: '2026-10-14' }]);
+});
+
+test('처방 후 닷새가 지나도록 발송일이 없으면 확인 대상', () => {
+  assert.equal(isShipmentOverdue('2026-09-22', '2026-09-27'), true);
+  assert.equal(isShipmentOverdue('2026-09-23', '2026-09-27'), false);
+  assert.equal(isShipmentOverdue('2026-09-27', '2026-09-27'), false);
 });

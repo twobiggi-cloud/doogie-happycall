@@ -1,8 +1,11 @@
 // 두기 해피콜 일정 규칙. 날짜는 모두 'YYYY-MM-DD' 문자열로 다룬다.
 // 브라우저 API를 쓰지 않아서 Node 테스트로 그대로 검증한다.
 
-export const MID_CALL_SKIP_MAX_DAYS = 15; // 처방 일수가 이 값 이하면 중간 콜 없음
+export const MID_CALL_SKIP_MAX_DAYS = 15; // 투약 일수가 이 값 이하면 중간 콜 없음
 export const PRE_RUNOUT_OFFSET_DAYS = 3;  // 소진 3일 전
+export const SHORT_RX_MAX_DAYS = 7;       // 이 일수 이하는 짧은 처방으로 본다
+export const SHORT_PRE_RUNOUT_OFFSET_DAYS = 1; // 짧은 처방은 소진 1일 전
+export const SHIPMENT_WAIT_LIMIT_DAYS = 5; // 처방 후 이 날수가 지나면 발송일 확인 대상
 export const MAX_NO_ANSWER = 3;           // 부재 3회째에 마감
 export const NO_CALL_ISO_DAYS = [4, 7];   // 목요일, 일요일
 
@@ -51,26 +54,36 @@ export function todayYMD(now = new Date()) {
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 }
 
-export function runoutOn(prescribedOn, days) {
-  return addDays(prescribedOn, days);
+// 복용은 약을 받은 날부터 시작한다. 모든 계산의 기준은 발송일이다.
+export function runoutOn(shippedOn, days) {
+  return addDays(shippedOn, days);
 }
 
-// 짧은 처방에서 콜이 처방일보다 앞서지 않게 한다.
-function notBeforePrescription(dueOn, prescribedOn) {
-  if (dueOn >= prescribedOn) return dueOn;
-  return isCallDay(prescribedOn) ? prescribedOn : nextCallDayAfter(prescribedOn);
+export function preRunoutOffsetFor(days) {
+  return days <= SHORT_RX_MAX_DAYS ? SHORT_PRE_RUNOUT_OFFSET_DAYS : PRE_RUNOUT_OFFSET_DAYS;
 }
 
-export function planCalls(prescribedOn, days) {
-  const runout = runoutOn(prescribedOn, days);
+// 짧은 처방에서 콜이 발송일보다 앞서지 않게 한다.
+function notBeforeShipment(dueOn, shippedOn) {
+  if (dueOn >= shippedOn) return dueOn;
+  return isCallDay(shippedOn) ? shippedOn : nextCallDayAfter(shippedOn);
+}
+
+export function planCalls(shippedOn, days) {
+  const runout = runoutOn(shippedOn, days);
   const calls = [];
   if (days > MID_CALL_SKIP_MAX_DAYS) {
-    const mid = pullBackToCallDay(addDays(prescribedOn, Math.floor(days / 2)));
-    calls.push({ kind: 'mid', dueOn: notBeforePrescription(mid, prescribedOn) });
+    const mid = pullBackToCallDay(addDays(shippedOn, Math.floor(days / 2)));
+    calls.push({ kind: 'mid', dueOn: notBeforeShipment(mid, shippedOn) });
   }
-  const pre = pullBackToCallDay(addDays(runout, -PRE_RUNOUT_OFFSET_DAYS));
-  calls.push({ kind: 'pre_runout', dueOn: notBeforePrescription(pre, prescribedOn) });
+  const pre = pullBackToCallDay(addDays(runout, -preRunoutOffsetFor(days)));
+  calls.push({ kind: 'pre_runout', dueOn: notBeforeShipment(pre, shippedOn) });
   return { runoutOn: runout, calls };
+}
+
+// 약이 아직 나가지 않은 채 오래 남은 처방을 찾는다. 보통 이틀, 길어도 나흘이면 나간다.
+export function isShipmentOverdue(prescribedOn, today) {
+  return daysBetween(prescribedOn, today) >= SHIPMENT_WAIT_LIMIT_DAYS;
 }
 
 export function hasPastCall(calls, today) {
