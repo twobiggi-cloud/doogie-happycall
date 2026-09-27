@@ -4,7 +4,7 @@ import {
   defaultVisitNeededFor,
 } from './schedule.js';
 import {
-  todayCalls, upcomingCalls, escalationCalls, visitCalls, activePrescriptionCount, preRunoutCall,
+  todayCalls, upcomingCalls, escalationCalls, visitCalls, activePrescriptionCount, preRunoutCall, awaitingShipment,
 } from './model.js';
 import {
   CONDITION_LABELS, RESULT_LABELS, KIND_LABELS, CALL_STATUS_LABELS, DAYS_PRESETS, DEFAULT_SCRIPTS,
@@ -12,7 +12,7 @@ import {
   fillTemplate, buildEscalationText, buildCallScript, staffLabel,
 } from './texts.js';
 
-const TABS = ['escalation', 'today', 'visit', 'all', 'scripts'];
+const TABS = ['escalation', 'today', 'shipment', 'visit', 'all', 'scripts'];
 
 export const state = { patients: [], scripts: {}, tab: 'today', search: '', staff: null, detailPatientId: null };
 
@@ -122,6 +122,7 @@ export function render() {
   const escalations = escalationCalls(state.patients);
   const todays = todayCalls(state.patients, today);
   const visits = visitCalls(state.patients);
+  const shipments = awaitingShipment(state.patients, today);
 
   $('stat-escalation').textContent = escalations.length;
   $('stat-today').textContent = todays.length;
@@ -129,6 +130,7 @@ export function render() {
   $('stat-active').textContent = activePrescriptionCount(state.patients);
   $('tab-count-escalation').textContent = escalations.length;
   $('tab-count-today').textContent = todays.length;
+  $('tab-count-shipment').textContent = shipments.length;
   $('tab-count-visit').textContent = visits.length;
   $('tab-count-all').textContent = state.patients.length;
 
@@ -137,6 +139,7 @@ export function render() {
 
   if (state.tab === 'escalation') renderEscalation(escalations);
   if (state.tab === 'today') renderToday(todays, today);
+  if (state.tab === 'shipment') renderShipment(shipments, today);
   if (state.tab === 'visit') renderVisit(visits);
   if (state.tab === 'all') renderAll();
   if (state.tab === 'scripts') renderScripts();
@@ -212,6 +215,38 @@ function renderEscalation(list) {
         <button class="btn btn-ghost btn-sm" data-action="detail" data-id="${patient.id}">상세 · 이력</button>
       </div>
     </div>`).join('') : '<div class="empty">원장님께 전달할 악화 환자가 없어요.</div>';
+}
+
+function renderShipment(rows, today) {
+  if (rows.length === 0) {
+    $('panel-shipment').innerHTML = '<div class="empty">발송일을 기다리는 처방이 없어요.</div>';
+    return;
+  }
+  $('panel-shipment').innerHTML = rows.map(({ patient, prescription, overdue }) => {
+    const waited = overdueDays(prescription.prescribedOn, today);
+    const late = overdue
+      ? `<span class="badge badge-late-ship">${waited}일째 발송일 없음</span>`
+      : `<span class="badge badge-waiting">발송 대기 ${waited}일째</span>`;
+    return `
+      <div class="case-card">
+        <div class="case-top">
+          <div class="case-id">
+            <div class="case-name">${esc(patient.name)}</div>
+            <div class="case-meta-row">${conditionBadge(patient)}${late}</div>
+            <div class="case-phone mono">${esc(formatPhone(patient.phone))}</div>
+          </div>
+          <div class="case-due">
+            <div>처방일</div>
+            <div class="d">${formatKoreanDate(prescription.prescribedOn)}</div>
+            <div>${prescription.days}일분</div>
+          </div>
+        </div>
+        <div class="case-actions">
+          <button class="btn btn-primary btn-sm" data-action="ship" data-id="${prescription.id}">📦 발송일 입력</button>
+          <button class="btn btn-ghost btn-sm" data-action="detail" data-id="${patient.id}">상세 · 이력</button>
+        </div>
+      </div>`;
+  }).join('');
 }
 
 function renderVisit(list) {
@@ -342,7 +377,9 @@ export function openDetailModal(patient) {
       <div class="rx-block">
         <div class="rx-head">
           <strong>${formatKoreanDate(rx.prescribedOn)} 처방 · ${rx.days}일</strong>
-          <span>소진 ${formatKoreanDate(rx.runoutOn)} · ${rxStatus}</span>
+          <span>${rx.shippedOn
+            ? `발송 ${formatKoreanDate(rx.shippedOn)} · 소진 ${formatKoreanDate(rx.runoutOn)}`
+            : '발송 대기'} · ${rxStatus}</span>
         </div>
         ${calls}
       </div>`;
@@ -604,7 +641,62 @@ export async function handleNoAnswer(view) {
 
 // ---- 부재 문자 ----
 
-export function openSmsModal(view) {
+export function openShipModal(row) {
+  const { patient, prescription } = row;
+  const today = todayYMD();
+  openModal(`
+    <div class="modal-head">
+      <div><h2>발송일 입력 · ${esc(patient.name)}</h2>
+        <div class="sub">${formatKoreanDate(prescription.prescribedOn)} 처방 · ${prescription.days}일분</div></div>
+      <button class="close-x" data-action="close">✕</button>
+    </div>
+    <div class="field">
+      <label>약을 보낸 날</label>
+      <input type="date" id="sp-date" value="${today}">
+      <span class="field-hint">이 날짜부터 콜 날짜를 셉니다.</span>
+    </div>
+    <div id="sp-preview"></div>
+    <div class="modal-footer">
+      <button class="btn" data-action="close">취소</button>
+      <button class="btn btn-primary" id="sp-submit">저장</button>
+    </div>`);
+
+  const readShip = () => {
+    const shippedOn = $('sp-date').value;
+    if (!shippedOn) return null;
+    return { shippedOn, plan: planCalls(shippedOn, prescription.days) };
+  };
+
+  const updatePreview = () => {
+    const read = readShip();
+    if (!read) {
+      $('sp-preview').innerHTML = '<div class="preview-box warn">발송일을 넣어주세요.</div>';
+      return;
+    }
+    const lines = read.plan.calls.map((c) => `${KIND_LABELS[c.kind]} ${formatKoreanDate(c.dueOn)}`).join(', ');
+    let html = `<div class="preview-box">소진일 ${formatKoreanDate(read.plan.runoutOn)} · ${lines}</div>`;
+    if (hasPastCall(read.plan.calls, today)) {
+      html += '<div class="preview-box warn">이미 지난 콜 날짜가 있어요. 저장하면 바로 지연으로 떠요.</div>';
+    }
+    $('sp-preview').innerHTML = html;
+  };
+
+  $('sp-date').addEventListener('input', updatePreview);
+  updatePreview();
+
+  $('sp-submit').addEventListener('click', async () => {
+    const read = readShip();
+    if (!read) { toast('발송일을 넣어주세요.'); return; }
+    const ok = await run(() => store.setShippedOn(prescription.id, {
+      shippedOn: read.shippedOn,
+      runoutOn: read.plan.runoutOn,
+      calls: read.plan.calls,
+    }), '발송일을 넣었어요. 콜이 잡혔어요.');
+    if (ok) closeModal();
+  });
+}
+
+function openSmsModal(view) {
   if (!view) return;
   const { patient, call } = view;
   const text = fillTemplate(scriptsWithDefaults().sms_no_answer, { name: patient.name });
@@ -672,6 +764,10 @@ export function onAppClick(e) {
   if (action === 'call') openCallModal(findView(id));
   if (action === 'no-answer') handleNoAnswer(findView(id));
   if (action === 'sms') openSmsModal(findView(id));
+  if (action === 'ship') {
+    const row = awaitingShipment(state.patients, todayYMD()).find((v) => v.prescription.id === id);
+    if (row) openShipModal(row);
+  }
   if (action === 'escalate') openEscalationModal(findView(id));
   if (action === 'visit-booked') run(() => store.markVisitBooked(id), '예약 완료로 표시했어요.');
   if (action === 'save-script') run(() => store.saveScript(id, $(`script-${id}`).value), '스크립트를 저장했어요.');
