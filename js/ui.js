@@ -405,6 +405,12 @@ export function openRegisterModal() {
         <input type="number" id="rg-days" min="1" max="90" value="30">
       </div>
     </div>
+    <div class="field">
+      <label>약 발송일</label>
+      <input type="date" id="rg-ship" value="${today}">
+      <label class="checkbox-row"><input type="checkbox" id="rg-ship-unknown"> 아직 모름 (발송 대기로 두기)</label>
+      <span class="field-hint">콜 날짜는 발송일부터 셉니다.</span>
+    </div>
     <div id="rg-preview"></div>
     <div class="modal-footer">
       <button class="btn" data-action="close">취소</button>
@@ -422,13 +428,20 @@ export function openRegisterModal() {
     const days = Number($('rg-days').value);
     const date = $('rg-date').value;
     if (!date || !isValidDays(days)) return null;
-    return { date, days, plan: planCalls(date, days) };
+    if ($('rg-ship-unknown').checked) return { date, days, shippedOn: null, plan: null };
+    const shippedOn = $('rg-ship').value;
+    if (!shippedOn) return null;
+    return { date, days, shippedOn, plan: planCalls(shippedOn, days) };
   };
 
   const updatePreview = () => {
     const read = readPlan();
     if (!read) {
-      $('rg-preview').innerHTML = '<div class="preview-box warn">처방일을 넣고, 처방 일수는 1~90일로 넣어주세요.</div>';
+      $('rg-preview').innerHTML = '<div class="preview-box warn">처방일과 발송일을 넣고, 처방 일수는 1~90일로 넣어주세요.</div>';
+      return;
+    }
+    if (!read.plan) {
+      $('rg-preview').innerHTML = '<div class="preview-box warn">발송 대기로 저장돼요. 발송일을 넣는 날 콜이 잡혀요.</div>';
       return;
     }
     const lines = read.plan.calls.map((c) => `${KIND_LABELS[c.kind]} ${formatKoreanDate(c.dueOn)}`).join(', ');
@@ -476,6 +489,11 @@ export function openRegisterModal() {
 
   $('rg-days').addEventListener('input', () => { selectPill('rg-days-presets', $('rg-days').value); updatePreview(); });
   $('rg-date').addEventListener('input', updatePreview);
+  $('rg-ship').addEventListener('input', updatePreview);
+  $('rg-ship-unknown').addEventListener('change', () => {
+    $('rg-ship').disabled = $('rg-ship-unknown').checked;
+    updatePreview();
+  });
   updatePreview();
 
   $('rg-submit').addEventListener('click', async () => {
@@ -484,17 +502,20 @@ export function openRegisterModal() {
     const read = readPlan();
     if (!isValidPhone(phone)) { toast('전화번호는 숫자 10~11자리로 넣어주세요.'); return; }
     if (!form.existing && !name) { toast('환자명을 넣어주세요.'); return; }
-    if (!read) { toast('처방일과 처방 일수(1~90일)를 확인해주세요.'); return; }
+    if (!read) { toast('처방일·발송일과 처방 일수(1~90일)를 확인해주세요.'); return; }
     const ok = await run(() => store.registerPrescription({
       phone,
       name: form.existing ? form.existing.name : name,
       condition: form.condition,
       conditionLabel: form.condition === 'other' ? $('rg-other').value.trim() : '',
       prescribedOn: read.date,
+      shippedOn: read.shippedOn,
       days: read.days,
-      runoutOn: read.plan.runoutOn,
-      calls: read.plan.calls,
-    }), form.existing ? '기존 환자에 처방을 추가했어요.' : '등록했어요.');
+      runoutOn: read.plan ? read.plan.runoutOn : null,
+      calls: read.plan ? read.plan.calls : [],
+    }), read.plan
+      ? (form.existing ? '기존 환자에 처방을 추가했어요.' : '등록했어요.')
+      : '발송 대기로 저장했어요. 발송일을 넣으면 콜이 잡혀요.');
     if (ok) closeModal();
   });
 }
