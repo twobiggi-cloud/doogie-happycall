@@ -1,7 +1,7 @@
 import * as store from './store.js';
 import {
   todayYMD, overdueDays, planCalls, hasPastCall, decideNoAnswer, decideSmsSent, decideAnswered,
-  defaultVisitNeededFor, isCallDay,
+  defaultVisitNeededFor, isCallDay, replanPendingCalls, dueDateWarning,
 } from './schedule.js';
 import {
   monthKeyOf, shiftMonth, monthLabel, monthGrid, calendarDateOf, bucketByDate, undatedViews, countsOf, summarize,
@@ -21,7 +21,7 @@ const TABS = ['escalation', 'today', 'shipment', 'calendar', 'visit', 'all', 'sc
 
 export const state = {
   patients: [], scripts: {}, tab: 'today', search: '', staff: null, detailPatientId: null,
-  month: null, pickedDate: null,
+  month: null, pickedDate: null, changes: [],
 };
 
 export const $ = (id) => document.getElementById(id);
@@ -68,10 +68,13 @@ export function findPatient(id) {
 
 export async function refresh() {
   try {
-    const [all, scripts, staff] = await Promise.all([store.loadAll(), store.loadScripts(), store.loadMyStaff()]);
+    const [all, scripts, staff, changes] = await Promise.all([
+      store.loadAll(), store.loadScripts(), store.loadMyStaff(), store.loadChanges(),
+    ]);
     state.patients = all.patients;
     state.scripts = scripts;
     state.staff = staff;
+    state.changes = changes;
     $('staff-name').textContent = staffLabel(staff) ? `${staffLabel(staff)} 님` : '';
     render();
     if (all.truncated) toast('환자가 너무 많아 일부만 불러왔어요. 관리자에게 알려주세요.');
@@ -174,7 +177,8 @@ function callCard({ patient, prescription, call }, today) {
     : (call.status === 'sms_pending'
       ? `<button class="btn btn-primary btn-sm" data-action="sms" data-id="${call.id}">✉️ 문자 문구 열기</button>`
       : `<button class="btn btn-primary btn-sm" data-action="call" data-id="${call.id}">📞 통화 기록</button>
-         <button class="btn btn-sm" data-action="no-answer" data-id="${call.id}">부재중</button>`);
+         <button class="btn btn-sm" data-action="no-answer" data-id="${call.id}">부재중</button>
+         <button class="btn btn-sm" data-action="edit-call" data-id="${call.id}">🗓 날짜 변경</button>`);
 
   return `
     <div class="case-card">
@@ -463,6 +467,11 @@ export function openDetailModal(patient) {
         </div>
         ${attempts}`;
     }).join('');
+    const logs = state.changes
+      .filter((c) => c.targetId === rx.id || rx.calls.some((call) => call.id === c.targetId))
+      .slice(0, 5)
+      .map((c) => `<div class="chg">· ${localDate(c.changedAt)} ${esc(c.summary)} — ${esc(c.reason)}${c.staffName ? ` (${esc(c.staffName)})` : ''}</div>`)
+      .join('');
     return `
       <div class="rx-block">
         <div class="rx-head">
@@ -472,6 +481,8 @@ export function openDetailModal(patient) {
             : '발송 대기'} · ${rxStatus}</span>
         </div>
         ${calls}
+        ${logs ? `<div class="chg-list">${logs}</div>` : ''}
+        ${rx.status === 'active' ? `<div class="row-end"><button class="btn btn-sm" data-action="edit-rx" data-id="${rx.id}">🗓 일정 고치기</button></div>` : ''}
       </div>`;
   }).join('');
 
@@ -847,6 +858,141 @@ export function openShipModal(row) {
   });
 }
 
+function openEditRxModal(patient, rx) {
+  const today = todayYMD();
+  openModal(`
+    <div class="modal-head">
+      <div><h2>일정 고치기 · ${esc(patientLabel(patient))}</h2>
+        <div class="sub">${formatKoreanDate(rx.prescribedOn)} 처방 · 지금 ${rx.days}일분</div></div>
+      <button class="close-x" data-action="close">✕</button>
+    </div>
+    <div class="field">
+      <label>약 발송일</label>
+      <input type="date" id="er-ship" value="${rx.shippedOn ?? today}">
+      <label class="checkbox-row"><input type="checkbox" id="er-wait"${rx.shippedOn ? '' : ' checked'}> 발송 대기로 되돌리기</label>
+    </div>
+    <div class="field">
+      <label>투약 일수</label>
+      ${pillGroup('er-days-presets', DAYS_PRESETS.map((d) => [d, `${d}일`]), rx.days)}
+      <input type="number" id="er-days" min="1" max="90" value="${rx.days}">
+    </div>
+    <div class="field">
+      <label>바꾸는 이유 *</label>
+      <input type="text" id="er-reason" maxlength="200" placeholder="예: 약이 이틀 늦게 나갔어요">
+    </div>
+    <div id="er-preview"></div>
+    <div class="modal-footer">
+      <button class="btn" data-action="close">취소</button>
+      <button class="btn btn-primary" id="er-submit">저장</button>
+    </div>`);
+
+  const read = () => {
+    const days = Number($('er-days').value);
+    if (!isValidDays(days)) return null;
+    if ($('er-wait').checked) return { days, shippedOn: null, plan: null };
+    const shippedOn = $('er-ship').value;
+    if (!shippedOn) return null;
+    return { days, shippedOn, plan: replanPendingCalls(rx.calls, shippedOn, days) };
+  };
+
+  const updatePreview = () => {
+    const r = read();
+    if (!r) {
+      $('er-preview').innerHTML = '<div class="preview-box warn">발송일과 투약 일수(1~90일)를 확인해주세요.</div>';
+      return;
+    }
+    if (!r.plan) {
+      $('er-preview').innerHTML = '<div class="preview-box warn">발송 대기로 되돌려요. 대기 중인 콜은 사라지고, 발송일을 다시 넣으면 새로 잡혀요.</div>';
+      return;
+    }
+    const kept = rx.calls.filter((c) => c.status !== 'pending');
+    const lines = r.plan.calls.map((c) => `${KIND_LABELS[c.kind]} ${formatKoreanDate(c.dueOn)}`).join(', ');
+    let html = `<div class="preview-box">소진일 ${formatKoreanDate(r.plan.runoutOn)}${lines ? ` · ${lines}` : ' · 새로 잡을 콜 없음'}</div>`;
+    if (kept.length > 0) {
+      html += `<div class="preview-box">이미 끝난 콜 ${kept.length}건은 그대로 둬요: ${kept.map((c) => KIND_LABELS[c.kind]).join(', ')}</div>`;
+    }
+    if (hasPastCall(r.plan.calls, today)) {
+      html += '<div class="preview-box warn">이미 지난 콜 날짜가 있어요. 저장하면 바로 지연으로 떠요.</div>';
+    }
+    $('er-preview').innerHTML = html;
+  };
+
+  $('er-ship').addEventListener('input', updatePreview);
+  $('er-days').addEventListener('input', () => { selectPill('er-days-presets', $('er-days').value); updatePreview(); });
+  $('er-days-presets').addEventListener('click', (e) => {
+    const b = e.target.closest('.pill-opt');
+    if (!b) return;
+    $('er-days').value = b.dataset.val;
+    selectPill('er-days-presets', b.dataset.val);
+    updatePreview();
+  });
+  $('er-wait').addEventListener('change', () => { $('er-ship').disabled = $('er-wait').checked; updatePreview(); });
+  $('er-ship').disabled = $('er-wait').checked;
+  updatePreview();
+
+  $('er-submit').addEventListener('click', async () => {
+    const r = read();
+    const reason = $('er-reason').value.trim();
+    if (!r) { toast('발송일과 투약 일수를 확인해주세요.'); return; }
+    if (!reason) { toast('바꾸는 이유를 적어주세요.'); return; }
+    const ok = await run(() => store.updatePrescriptionSchedule(rx.id, {
+      expectedShippedOn: rx.shippedOn,
+      shippedOn: r.shippedOn,
+      days: r.days,
+      runoutOn: r.plan ? r.plan.runoutOn : null,
+      calls: r.plan ? r.plan.calls : [],
+      reason,
+    }), '일정을 고쳤어요.');
+    if (ok) closeModal();
+  });
+}
+
+function openEditCallModal({ patient, prescription, call }) {
+  openModal(`
+    <div class="modal-head">
+      <div><h2>콜 날짜 변경 · ${esc(patientLabel(patient))}</h2>
+        <div class="sub">${KIND_LABELS[call.kind]} · 지금 ${formatKoreanDate(call.dueOn)} · 소진 ${formatKoreanDate(prescription.runoutOn)}</div></div>
+      <button class="close-x" data-action="close">✕</button>
+    </div>
+    <div class="field">
+      <label>새 날짜</label>
+      <input type="date" id="ec-date" value="${call.dueOn}">
+    </div>
+    <div class="field">
+      <label>바꾸는 이유 *</label>
+      <input type="text" id="ec-reason" maxlength="200" placeholder="예: 환자가 다음 주에 통화 원하심">
+    </div>
+    <div id="ec-preview"></div>
+    <div class="modal-footer">
+      <button class="btn" data-action="close">취소</button>
+      <button class="btn btn-primary" id="ec-submit">저장</button>
+    </div>`);
+
+  const updatePreview = () => {
+    const date = $('ec-date').value;
+    if (!date) { $('ec-preview').innerHTML = '<div class="preview-box warn">날짜를 넣어주세요.</div>'; return; }
+    const warn = dueDateWarning(date, prescription.runoutOn);
+    $('ec-preview').innerHTML = warn
+      ? `<div class="preview-box warn">${warn}</div>`
+      : `<div class="preview-box">${formatKoreanDate(date)}로 옮겨요.</div>`;
+  };
+
+  $('ec-date').addEventListener('input', updatePreview);
+  updatePreview();
+
+  $('ec-submit').addEventListener('click', async () => {
+    const date = $('ec-date').value;
+    const reason = $('ec-reason').value.trim();
+    if (!date) { toast('날짜를 넣어주세요.'); return; }
+    if (!isCallDay(date)) { toast('목요일과 일요일에는 콜을 잡지 않아요.'); return; }
+    if (!reason) { toast('바꾸는 이유를 적어주세요.'); return; }
+    const ok = await run(() => store.updateCallDueOn(call.id, {
+      expectedDueOn: call.dueOn, dueOn: date, reason,
+    }), '날짜를 옮겼어요.');
+    if (ok) closeModal();
+  });
+}
+
 function openSmsModal(view) {
   if (!view) return;
   const { patient, call } = view;
@@ -923,6 +1069,13 @@ export function onAppClick(e) {
   if (action === 'cal-next') { state.month = shiftMonth(state.month ?? monthKeyOf(todayYMD()), 1); state.pickedDate = null; render(); }
   if (action === 'cal-today') { state.month = monthKeyOf(todayYMD()); state.pickedDate = todayYMD(); render(); }
   if (action === 'cal-day') { state.pickedDate = state.pickedDate === id ? null : id; render(); }
+  if (action === 'edit-call') openEditCallModal(findView(id));
+  if (action === 'edit-rx') {
+    for (const patient of state.patients) {
+      const rx = patient.prescriptions.find((r) => r.id === id);
+      if (rx) { openEditRxModal(patient, rx); break; }
+    }
+  }
   if (action === 'escalate') openEscalationModal(findView(id));
   if (action === 'visit-booked') run(() => store.markVisitBooked(id), '예약 완료로 표시했어요.');
   if (action === 'save-script') run(() => store.saveScript(id, $(`script-${id}`).value), '스크립트를 저장했어요.');
@@ -945,6 +1098,7 @@ export function startApp() {
 export function stopApp() {
   state.patients = [];
   state.scripts = {};
+  state.changes = [];
   state.staff = null;
   $('staff-name').textContent = '';
   closeModal();
