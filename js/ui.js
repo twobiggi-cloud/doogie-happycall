@@ -157,7 +157,9 @@ function callCard({ patient, prescription, call }, today) {
   const pills = [conditionBadge(patient), kindBadge(call)];
   if (call.noAnswerCount > 0) pills.push(`<span class="badge badge-other">부재 ${call.noAnswerCount}/3</span>`);
   const late = overdueDays(call.dueOn, today);
-  if (call.status === 'sms_pending') pills.push('<span class="badge badge-sms">문자 대기</span>');
+  if (call.status === 'done') pills.push('<span class="badge badge-improved">완료</span>');
+  else if (call.status === 'closed_no_answer') pills.push('<span class="badge badge-ended">문자로 마감</span>');
+  else if (call.status === 'sms_pending') pills.push('<span class="badge badge-sms">문자 대기</span>');
   else if (late > 0) pills.push(`<span class="badge badge-overdue">${late}일 지연</span>`);
   else if (call.dueOn === today) pills.push('<span class="badge badge-today">오늘</span>');
 
@@ -165,10 +167,13 @@ function callCard({ patient, prescription, call }, today) {
   const note = last
     ? `<div class="case-note">최근 시도(${localDate(last.attemptedAt)}): ${last.outcome === 'no_answer' ? '부재중' : esc(last.note || '메모 없음')}</div>`
     : '';
-  const actions = call.status === 'sms_pending'
-    ? `<button class="btn btn-primary btn-sm" data-action="sms" data-id="${call.id}">✉️ 문자 문구 열기</button>`
-    : `<button class="btn btn-primary btn-sm" data-action="call" data-id="${call.id}">📞 통화 기록</button>
-       <button class="btn btn-sm" data-action="no-answer" data-id="${call.id}">부재중</button>`;
+  const finished = call.status === 'done' || call.status === 'closed_no_answer';
+  const actions = finished
+    ? ''
+    : (call.status === 'sms_pending'
+      ? `<button class="btn btn-primary btn-sm" data-action="sms" data-id="${call.id}">✉️ 문자 문구 열기</button>`
+      : `<button class="btn btn-primary btn-sm" data-action="call" data-id="${call.id}">📞 통화 기록</button>
+         <button class="btn btn-sm" data-action="no-answer" data-id="${call.id}">부재중</button>`);
 
   return `
     <div class="case-card">
@@ -179,7 +184,7 @@ function callCard({ patient, prescription, call }, today) {
           <div class="case-phone mono">${esc(formatPhone(patient.phone))}</div>
         </div>
         <div class="case-due">
-          <div>예정일</div><div class="d">${formatKoreanDate(call.dueOn)}</div>
+          <div>${finished ? '처리한 날' : '예정일'}</div><div class="d">${finished ? (call.doneAt ? localDate(call.doneAt) : '-') : formatKoreanDate(call.dueOn)}</div>
           <div>소진 ${formatKoreanDate(prescription.runoutOn)}</div>
         </div>
       </div>
