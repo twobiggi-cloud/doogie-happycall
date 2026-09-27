@@ -38,7 +38,7 @@ const PATIENT_PAGE_SIZE = 500;
 const PATIENT_MAX = 5000;
 
 const PATIENT_SELECT = `
-  id, name, phone, condition, condition_label, created_at,
+  id, name, phone, relation, condition, condition_label, created_at,
   prescriptions (
     id, prescribed_on, shipped_on, days, runout_on, status, closed_reason, created_at,
     calls (
@@ -84,20 +84,24 @@ export async function loadMyStaff() {
 
 // ---- 쓰기 ----
 
-export async function findPatientByPhone(phone) {
+// 한 번호를 가족이 함께 쓴다. 그 번호에 등록된 사람을 모두 준다.
+export async function findPatientsByPhone(phone) {
   const { data, error } = await supabase
     .from('patients')
-    .select('id, name, condition, condition_label')
+    .select('id, name, relation, condition, condition_label')
     .eq('phone', phone)
-    .maybeSingle();
+    .order('created_at');
   check(error);
-  return data ? { id: data.id, name: data.name, condition: data.condition, conditionLabel: data.condition_label ?? '' } : null;
+  return (data ?? []).map((d) => ({
+    id: d.id, name: d.name, relation: d.relation ?? 'self', condition: d.condition, conditionLabel: d.condition_label ?? '',
+  }));
 }
 
-export async function registerPrescription({ phone, name, condition, conditionLabel, prescribedOn, shippedOn, days, runoutOn, calls }) {
+export async function registerPrescription({ phone, name, relation, condition, conditionLabel, prescribedOn, shippedOn, days, runoutOn, calls }) {
   const { data, error } = await supabase.rpc('register_prescription', {
     p_phone: phone,
     p_name: name,
+    p_relation: relation ?? 'self',
     p_condition: condition,
     p_condition_label: conditionLabel ?? '',
     p_prescribed_on: prescribedOn,

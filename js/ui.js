@@ -14,6 +14,7 @@ import {
   CONDITION_LABELS, RESULT_LABELS, KIND_LABELS, CALL_STATUS_LABELS, DAYS_PRESETS, DEFAULT_SCRIPTS,
   normalizePhone, isValidPhone, formatPhone, isValidDays, conditionText, formatKoreanDate,
   fillTemplate, buildEscalationText, buildCallScript, staffLabel,
+  RELATION_PRESETS, patientLabel, addressName,
 } from './texts.js';
 
 const TABS = ['escalation', 'today', 'shipment', 'calendar', 'visit', 'all', 'scripts'];
@@ -179,7 +180,7 @@ function callCard({ patient, prescription, call }, today) {
     <div class="case-card">
       <div class="case-top">
         <div class="case-id">
-          <div class="case-name">${esc(patient.name)}</div>
+          <div class="case-name">${esc(patientLabel(patient))}</div>
           <div class="case-meta-row">${pills.join('')}</div>
           <div class="case-phone mono">${esc(formatPhone(patient.phone))}</div>
         </div>
@@ -205,7 +206,7 @@ function renderToday(list, today) {
     html += '<h3 class="section-title">이번 주 예정</h3>';
     html += upcoming.map(({ patient, call }) => `
       <div class="upcoming-row">
-        <span>${esc(patient.name)} ${conditionBadge(patient)} ${kindBadge(call)}</span>
+        <span>${esc(patientLabel(patient))} ${conditionBadge(patient)} ${kindBadge(call)}</span>
         <span class="mono">${formatKoreanDate(call.dueOn)}</span>
       </div>`).join('');
   }
@@ -217,7 +218,7 @@ function renderEscalation(list) {
     <div class="case-card">
       <div class="case-top">
         <div class="case-id">
-          <div class="case-name">${esc(patient.name)}</div>
+          <div class="case-name">${esc(patientLabel(patient))}</div>
           <div class="case-meta-row">${conditionBadge(patient)}${kindBadge(call)}${resultBadge(call.result)}</div>
         </div>
         <div class="case-due"><div>통화일</div><div class="d">${call.doneAt ? localDate(call.doneAt) : '-'}</div></div>
@@ -244,7 +245,7 @@ function renderShipment(rows, today) {
       <div class="case-card">
         <div class="case-top">
           <div class="case-id">
-            <div class="case-name">${esc(patient.name)}</div>
+            <div class="case-name">${esc(patientLabel(patient))}</div>
             <div class="case-meta-row">${conditionBadge(patient)}${late}</div>
             <div class="case-phone mono">${esc(formatPhone(patient.phone))}</div>
           </div>
@@ -343,7 +344,7 @@ function renderVisit(list) {
     <div class="case-card">
       <div class="case-top">
         <div class="case-id">
-          <div class="case-name">${esc(patient.name)}</div>
+          <div class="case-name">${esc(patientLabel(patient))}</div>
           <div class="case-meta-row">${conditionBadge(patient)}<span class="badge badge-visit">내원 예약 필요</span>${resultBadge(call.result)}</div>
           <div class="case-phone mono">${esc(formatPhone(patient.phone))}</div>
         </div>
@@ -388,7 +389,7 @@ function renderAllRows() {
     .map((p) => {
       const next = nextOpenCallDate(p);
       return `<tr>
-        <td class="name-cell" data-action="detail" data-id="${p.id}">${esc(p.name)}</td>
+        <td class="name-cell" data-action="detail" data-id="${p.id}">${esc(patientLabel(p))}</td>
         <td class="mono">${esc(formatPhone(p.phone))}</td>
         <td>${esc(conditionText(p.condition, p.conditionLabel))}</td>
         <td>${p.prescriptions.filter((r) => r.status === 'active').length}건</td>
@@ -476,7 +477,7 @@ export function openDetailModal(patient) {
 
   openModal(`
     <div class="modal-head">
-      <div><h2>${esc(patient.name)}</h2><div class="sub">${esc(formatPhone(patient.phone))} · ${esc(conditionText(patient.condition, patient.conditionLabel))}</div></div>
+      <div><h2>${esc(patientLabel(patient))}</h2><div class="sub">${esc(formatPhone(patient.phone))} · ${esc(conditionText(patient.condition, patient.conditionLabel))}</div></div>
       <button class="close-x" data-action="close">✕</button>
     </div>
     ${blocks || '<div class="empty">처방이 없어요.</div>'}
@@ -506,7 +507,7 @@ function selectPill(groupId, value) {
 
 export function openRegisterModal() {
   const today = todayYMD();
-  const form = { condition: 'urticaria', existing: null, lookup: 0 };
+  const form = { condition: 'urticaria', existing: null, relation: 'self', family: [], lookup: 0 };
 
   openModal(`
     <div class="modal-head">
@@ -518,9 +519,18 @@ export function openRegisterModal() {
       <input type="tel" id="rg-phone" inputmode="numeric" placeholder="01012345678">
       <span class="existing-note" id="rg-existing"></span>
     </div>
+    <div class="field" id="rg-family-field" hidden>
+      <label>이 번호로 등록된 가족</label>
+      <div class="fam-list" id="rg-family"></div>
+    </div>
     <div class="field-row">
       <div class="field"><label>환자명 *</label><input type="text" id="rg-name" maxlength="50"></div>
       <div class="field"><label>증상</label>${pillGroup('rg-condition', Object.entries(CONDITION_LABELS), form.condition)}</div>
+    </div>
+    <div class="field" id="rg-relation-field">
+      <label>이 번호의 주인과의 관계</label>
+      ${pillGroup('rg-relation', RELATION_PRESETS, 'self')}
+      <span class="field-hint">전화를 받는 분이 환자가 아닐 때 '자녀', '모'처럼 골라주세요.</span>
     </div>
     <div class="field" id="rg-other-field" hidden><label>기타 증상 이름</label><input type="text" id="rg-other" placeholder="예: 아토피"></div>
     <div class="field-row">
@@ -548,6 +558,42 @@ export function openRegisterModal() {
     selectPill('rg-condition', condition);
     $('rg-other-field').hidden = condition !== 'other';
     document.querySelectorAll('#rg-condition .pill-opt').forEach((b) => { b.disabled = locked; });
+  };
+
+  const renderFamily = () => {
+    const field = $('rg-family-field');
+    if (form.family.length === 0) { field.hidden = true; $('rg-family').innerHTML = ''; return; }
+    field.hidden = false;
+    const options = form.family.map((p) => `
+      <button type="button" class="fam-opt${form.existing && form.existing.id === p.id ? ' selected' : ''}" data-pick="${p.id}">
+        <span class="who">${esc(patientLabel(p))}</span>
+        <span class="what">${esc(conditionText(p.condition, p.conditionLabel))} · 이 사람에 처방 추가</span>
+      </button>`).join('');
+    $('rg-family').innerHTML = `${options}
+      <button type="button" class="fam-opt${form.existing ? '' : ' selected'}" data-pick="new">
+        <span class="who">＋ 가족 새로 등록</span>
+        <span class="what">같은 번호에 다른 사람을 더해요</span>
+      </button>`;
+  };
+
+  const pickPatient = (id) => {
+    form.existing = id === 'new' ? null : (form.family.find((p) => p.id === id) ?? null);
+    if (form.existing) {
+      $('rg-name').value = form.existing.name;
+      $('rg-name').disabled = true;
+      $('rg-other').value = form.existing.conditionLabel;
+      setCondition(form.existing.condition, true);
+      form.relation = form.existing.relation;
+      $('rg-relation-field').hidden = true;
+    } else {
+      $('rg-name').value = '';
+      $('rg-name').disabled = false;
+      setCondition(form.condition, false);
+      form.relation = 'self';
+      selectPill('rg-relation', 'self');
+      $('rg-relation-field').hidden = false;
+    }
+    renderFamily();
   };
 
   const readPlan = () => {
@@ -582,22 +628,37 @@ export function openRegisterModal() {
     const phone = normalizePhone($('rg-phone').value);
     const token = ++form.lookup;
     form.existing = null;
+    form.family = [];
     $('rg-existing').textContent = '';
     $('rg-name').disabled = false;
     setCondition(form.condition, false);
+    renderFamily();
     if (!isValidPhone(phone)) return;
     try {
-      const found = await store.findPatientByPhone(phone);
-      if (token !== form.lookup || !found) return;
-      form.existing = found;
-      $('rg-name').value = found.name;
-      $('rg-name').disabled = true;
-      $('rg-other').value = found.conditionLabel;
-      setCondition(found.condition, true);
-      $('rg-existing').textContent = '기존 환자예요. 새 처방만 추가돼요.';
+      const found = await store.findPatientsByPhone(phone);
+      if (token !== form.lookup) return;
+      form.family = found;
+      if (found.length > 0) {
+        $('rg-existing').textContent = `이 번호로 ${found.length}명이 등록돼 있어요. 아래에서 고르거나 새로 등록하세요.`;
+        pickPatient(found[0].id);
+      } else {
+        renderFamily();
+      }
     } catch (err) {
       console.error(err);
     }
+  });
+
+  $('rg-family').addEventListener('click', (e) => {
+    const b = e.target.closest('.fam-opt');
+    if (b) pickPatient(b.dataset.pick);
+  });
+
+  $('rg-relation').addEventListener('click', (e) => {
+    const b = e.target.closest('.pill-opt');
+    if (!b) return;
+    form.relation = b.dataset.val;
+    selectPill('rg-relation', b.dataset.val);
   });
 
   $('rg-condition').addEventListener('click', (e) => {
@@ -632,6 +693,7 @@ export function openRegisterModal() {
     const ok = await run(() => store.registerPrescription({
       phone,
       name: form.existing ? form.existing.name : name,
+      relation: form.existing ? form.existing.relation : form.relation,
       condition: form.condition,
       conditionLabel: form.condition === 'other' ? $('rg-other').value.trim() : '',
       prescribedOn: read.date,
@@ -652,7 +714,7 @@ export function openCallModal(view) {
   if (!view) return;
   const { patient, prescription, call } = view;
   const script = buildCallScript({
-    condition: patient.condition, kind: call.kind, name: patient.name,
+    condition: patient.condition, kind: call.kind, name: addressName(patient),
     runoutOn: prescription.runoutOn, scripts: scriptsWithDefaults(),
   });
   let result = 'improved';
@@ -660,7 +722,7 @@ export function openCallModal(view) {
   openModal(`
     <div class="modal-head">
       <div>
-        <h2>통화 기록 · ${esc(patient.name)}</h2>
+        <h2>통화 기록 · ${esc(patientLabel(patient))}</h2>
         <div class="sub">${esc(formatPhone(patient.phone))} · ${KIND_LABELS[call.kind]} · 소진 ${formatKoreanDate(prescription.runoutOn)}</div>
       </div>
       <button class="close-x" data-action="close">✕</button>
@@ -735,7 +797,7 @@ export function openShipModal(row) {
   const today = todayYMD();
   openModal(`
     <div class="modal-head">
-      <div><h2>발송일 입력 · ${esc(patient.name)}</h2>
+      <div><h2>발송일 입력 · ${esc(patientLabel(patient))}</h2>
         <div class="sub">${formatKoreanDate(prescription.prescribedOn)} 처방 · ${prescription.days}일분</div></div>
       <button class="close-x" data-action="close">✕</button>
     </div>
@@ -788,11 +850,11 @@ export function openShipModal(row) {
 function openSmsModal(view) {
   if (!view) return;
   const { patient, call } = view;
-  const text = fillTemplate(scriptsWithDefaults().sms_no_answer, { name: patient.name });
+  const text = fillTemplate(scriptsWithDefaults().sms_no_answer, { name: addressName(patient) });
 
   openModal(`
     <div class="modal-head">
-      <div><h2>부재 안내 문자 · ${esc(patient.name)}</h2><div class="sub">${esc(formatPhone(patient.phone))} · 부재 ${call.noAnswerCount}회</div></div>
+      <div><h2>부재 안내 문자 · ${esc(patientLabel(patient))}</h2><div class="sub">${esc(formatPhone(patient.phone))} · 부재 ${call.noAnswerCount}회</div></div>
       <button class="close-x" data-action="close">✕</button>
     </div>
     <textarea class="copy-box" id="sms-text">${esc(text)}</textarea>
@@ -820,12 +882,12 @@ export function openEscalationModal(view) {
   if (!view) return;
   const { patient, call } = view;
   const text = buildEscalationText({
-    name: patient.name, condition: patient.condition, conditionLabel: patient.conditionLabel, note: call.note,
+    name: patientLabel(patient), condition: patient.condition, conditionLabel: patient.conditionLabel, note: call.note,
   });
 
   openModal(`
     <div class="modal-head">
-      <div><h2>원장 전달 · ${esc(patient.name)}</h2><div class="sub">한의사랑 메신저에 붙여넣어 주세요</div></div>
+      <div><h2>원장 전달 · ${esc(patientLabel(patient))}</h2><div class="sub">한의사랑 메신저에 붙여넣어 주세요</div></div>
       <button class="close-x" data-action="close">✕</button>
     </div>
     <textarea class="copy-box" id="esc-text">${esc(text)}</textarea>

@@ -245,3 +245,8 @@
 .cal-cell.has-late{border-left:3px solid var(--danger);}
 .cal-cell.all-done .n{color:var(--success);}
 .cal-day{margin-top:16px;}
+.fam-list{display:flex; flex-direction:column; gap:6px; margin-bottom:6px;}
+.fam-opt{display:flex; justify-content:space-between; align-items:center; gap:8px; border:1px solid var(--border-strong); background:var(--surface); border-radius:10px; padding:9px 12px; font-size:13px; text-align:left; width:100%;}
+.fam-opt.selected{background:var(--accent-soft); border-color:var(--accent);}
+.fam-opt .who{font-weight:700;}
+.fam-opt .what{font-size:12px; color:var(--text-muted);}
