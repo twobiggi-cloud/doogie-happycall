@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 직원 여러 명이 각자 로그인해 같은 화면을 쓰면서, 담당자가 자동으로 기록되고, 두 사람이 같은 콜을 동시에 저장해도 기록이 덮이지 않으며, 환자가 1000명을 넘어도 콜이 목록에서 빠지지 않게 만든다.
+**Goal:** 접수실 직원들이 공용 계정으로 간단히 로그인해 같은 화면을 쓰면서, 담당자가 자동으로 기록되고, 두 사람이 같은 콜을 동시에 저장해도 기록이 덮이지 않으며, 환자가 1000명을 넘어도 콜이 목록에서 빠지지 않게 만든다.
 
-**Architecture:** 기존 구조를 그대로 둔다. 직원 이름은 `allowed_emails`에 열을 하나 더해 보관하고, 자기 행만 읽는 행 수준 보안 정책으로 화면이 자기 이름을 읽는다. 담당자는 화면이 보내지 않고 `save_call_outcome` 안에서 로그인 계정으로 채운다. 같은 함수에 "저장 직전 상태"를 함께 보내 상태가 그대로일 때만 저장한다. 환자 조회는 500명씩 여러 번 나눠 받아 합친다.
+**Architecture:** 기존 구조를 그대로 둔다. 로그인은 이메일 링크 대신 공용 계정의 비밀번호로 바꾼다. 비밀번호는 Supabase 계정의 진짜 비밀번호이고, 환자 정보는 그대로 행 수준 보안이 지킨다. 계정 표시 이름은 `allowed_emails`에 열을 하나 더해 보관하고, 자기 행만 읽는 정책으로 화면이 그 이름을 읽는다. 담당자는 화면이 보내지 않고 `save_call_outcome` 안에서 로그인 계정으로 채운다. 같은 함수에 "저장 직전 상태"를 함께 보내 상태가 그대로일 때만 저장한다. 환자 조회는 500명씩 여러 번 나눠 받아 합친다.
 
 **Tech Stack:** HTML/CSS/바닐라 JS(ES 모듈), `@supabase/supabase-js@2.116.0`, Node 24 `node:test`, Supabase(Postgres, RLS, RPC), Vercel.
 
@@ -779,7 +779,7 @@ Expected: 두 번째 누름은 안내만 뜨고 아무것도 바뀌지 않는다
 "## 데이터와 보안" 절의 로그인 항목을 아래로 바꾼다.
 
 ```markdown
-- 로그인은 허용 이메일 목록에 있는 계정만 통과한다. 목록은 `allowed_emails` 표에서 관리하고, 표시 이름은 같은 표의 `display_name`에 둔다. 문서나 코드에 이메일을 적지 않는다.
+- 로그인할 수 있는 계정은 `allowed_emails` 표에 있는 이메일뿐이고, 표시 이름은 같은 표의 `display_name`에 둔다. 문서나 코드에 이메일을 적지 않는다. (로그인 방식은 Task 6에서 공용 계정 비밀번호로 바꾼다.)
 - 통화 기록의 담당자는 화면이 보내지 않는다. `save_call_outcome`이 로그인 계정에서 채운다.
 - 콜을 저장할 때는 저장 직전 상태를 함께 보내고, 상태가 바뀌었으면 저장하지 않고 사용자에게 알린다.
 ```
@@ -807,102 +807,160 @@ MSG
 
 ---
 
-### Task 6: 직원 계정을 실제로 늘리기
+### Task 6: 공용 계정으로 비밀번호 로그인
 
 **Files:**
-- Modify: `README.md`
-- Test: Supabase MCP `execute_sql` + 새 계정으로 로그인
+- Modify: `js/store.js`, `js/main.js`, `index.html`, `README.md`
+- Test: 로컬 서버와 사용자 Chrome + Supabase MCP `execute_sql`
 
 **Interfaces:**
 - Consumes: Task 1의 `display_name`과 자기 행 읽기 정책, Task 3의 헤더 이름 표시
-- Produces: 직원 한 명을 추가하는 절차와 그 절차를 적은 `README.md` 절
+- Produces:
+  - `store.signInWithPassword(email, password): Promise<void>`
+  - 로그인 화면이 이메일 링크 대신 비밀번호를 받는다. 마지막으로 성공한 이메일은 그 브라우저에 기억돼 다음부터는 비밀번호만 넣으면 된다
+  - `store.sendLoginLink()`는 없어진다
 
-**왜 필요한가:** V2.0의 목표는 직원 여러 명이 각자 로그인하는 것이다. 표와 화면만으로는 계정이 늘지 않는다. 계정 추가는 대시보드 작업이라 사용자가 직접 해야 하므로, 절차를 문서로 남긴다.
+**왜 이렇게 하는가:** 직원이 두 명이지만 사람을 나눌 필요가 없다는 요청이다. 공용 계정 하나에 비밀번호를 걸어 두 명이 같이 쓴다. 화면에서만 막는 방식은 쓰지 않는다. 그 방식은 주소와 공개 키만 있으면 데이터를 그대로 가져갈 수 있다. 여기서 쓰는 비밀번호는 Supabase 계정의 진짜 비밀번호이고, 환자 정보는 그대로 행 수준 보안이 지킨다.
 
-- [ ] **Step 1: 사용자에게 계정 추가 요청**
+**대신 포기하는 것:** 누가 통화했는지 계정으로는 구분되지 않는다. 통화 기록의 담당자는 공용 계정의 표시 이름(예: `접수실`) 하나로 남는다. 나중에 직원별 통계가 필요해지면 그때 계정을 나눈다.
 
-아래를 사용자에게 안내한다. 이메일 주소는 사용자가 정한다. 문서나 커밋에 그 주소를 적지 않는다.
+**비밀번호 규칙:** 비밀번호는 저장소, 문서, 커밋, 이 계획 어디에도 적지 않는다. 사용자가 대시보드에서 정하고 직원에게 직접 알려준다.
+
+- [ ] **Step 1: 사용자에게 공용 계정 준비 요청**
+
+아래를 사용자에게 안내한다.
 
 1. `https://supabase.com/dashboard/project/yblqrtwbvqrshqmnizij/auth/users` 를 연다.
-2. 오른쪽 위 **Add user** → **Create new user** 를 누른다.
-3. 직원 이메일을 넣고, 비밀번호는 아무 값이나 넣는다. 이 앱은 비밀번호를 쓰지 않는다.
-4. **Auto Confirm User** 를 켜고 **Create user** 를 누른다.
-5. 만든 이메일을 이 대화에 알려준다.
+2. 지금 쓰는 계정을 그대로 공용 계정으로 쓸지, 새 계정(예: 한의원 공용 주소)을 만들지 정한다. 새로 만들면 **Add user → Create new user**, **Auto Confirm User**를 켜고 만든다.
+3. 그 계정의 비밀번호를 정한다. 기존 계정이면 점 세 개 메뉴의 비밀번호 변경을 쓴다. **열두 자 이상으로, 다른 곳에서 쓰지 않는 값**으로 정한다.
+4. 공용으로 쓸 이메일 주소를 이 대화에 알려준다. 비밀번호는 알려주지 않아도 된다.
 
-- [ ] **Step 2: 허용 목록에 직원 추가**
+- [ ] **Step 2: 허용 목록과 표시 이름 맞추기**
 
-MCP `execute_sql` (역할 전환 없이). `<직원이메일>`과 `<직원이름>`은 사용자가 준 값이다.
+MCP `execute_sql` (역할 전환 없이). `<공용이메일>`은 사용자가 준 주소다.
 
 ```sql
 insert into public.allowed_emails (email, display_name)
-values (lower('<직원이메일>'), '<직원이름>')
+values (lower('<공용이메일>'), '접수실')
 on conflict (email) do update set display_name = excluded.display_name;
 select email, display_name from public.allowed_emails order by email;
 ```
 
-Expected: 두 행 이상. 새 직원 행의 `display_name`이 사용자가 준 이름과 같다.
+Expected: 공용 계정 행의 `display_name`이 `접수실`이다.
 
-- [ ] **Step 3: 새 계정이 자기 행만 보는지**
+- [ ] **Step 3: `js/store.js` 고치기**
 
-```sql
-set local role authenticated;
-select set_config('request.jwt.claims', '{"role":"authenticated","email":"<직원이메일>"}', true);
-select email, display_name from public.allowed_emails;
+`sendLoginLink` 함수를 통째로 아래로 바꾼다.
+
+```js
+export async function signInWithPassword(email, password) {
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  check(error);
+}
 ```
 
-Expected: 1행. 새 직원 자신의 행만 보인다.
+- [ ] **Step 4: `index.html` 로그인 화면 고치기**
 
-- [ ] **Step 4: 새 계정이 콜을 저장할 수 있는지**
+`login-card` 안의 `<p>`와 `<form>`을 아래로 바꾼다.
 
-같은 앞부분 + 예시 환자의 대기 중인 콜 하나로 시험한다.
-
-```sql
-select public.save_call_outcome(
-  (select c.id from calls c join prescriptions r on r.id = c.prescription_id
-   join patients p on p.id = r.patient_id
-   where p.phone = '01011110003' and c.status = 'pending' limit 1),
-  'pending', 'no_answer', '', 'pending', date '2026-10-07', 1, null, false, 'none', null);
-select a.staff_name, a.outcome from call_attempts a order by a.attempted_at desc limit 1;
+```html
+    <p>공용 계정 이메일과 비밀번호로 들어갑니다.</p>
+    <form id="login-form">
+      <input type="email" id="login-email" class="search-input" placeholder="이메일" autocomplete="username" required>
+      <input type="password" id="login-password" class="search-input" placeholder="비밀번호" autocomplete="current-password" required>
+      <button type="submit" class="btn btn-primary">로그인</button>
+    </form>
 ```
 
-Expected: 저장되고 `staff_name`이 새 직원 이름이다.
+- [ ] **Step 5: `js/main.js` 고치기**
 
-확인 뒤 되돌린다.
+import 줄과 제출 처리를 아래로 바꾼다. 마지막으로 성공한 이메일은 그 브라우저에만 기억한다.
 
-```sql
-update public.calls set status = 'pending', no_answer_count = 0, due_on = date '2026-09-23'
-where id = (select c.id from calls c join prescriptions r on r.id = c.prescription_id
-            join patients p on p.id = r.patient_id where p.phone = '01011110003' limit 1);
-delete from public.call_attempts a
-where a.id = (select id from call_attempts order by attempted_at desc limit 1);
+```js
+import { getSession, onAuthChange, signInWithPassword } from './store.js';
 ```
 
-- [ ] **Step 5: 새 계정으로 로그인 확인 (사용자)**
+```js
+const loginButton = document.querySelector('#login-form button[type="submit"]');
+const emailInput = document.getElementById('login-email');
+const passwordInput = document.getElementById('login-password');
+const LAST_EMAIL_KEY = 'happycall-last-email';
 
-사용자에게 요청한다. 직원 이메일로 로그인 링크를 받아 같은 PC의 Chrome에서 누른다. 메일 한도가 있으므로 **한 번만** 요청한다.
-Expected: 로그인되고 헤더에 새 직원 이름이 보인다. 통계와 목록은 기존과 같다.
+try {
+  const saved = localStorage.getItem(LAST_EMAIL_KEY);
+  if (saved) {
+    emailInput.value = saved;
+    passwordInput.focus();
+  }
+} catch (err) {
+  console.error(err);
+}
 
-- [ ] **Step 6: `README.md`에 절차 적기**
+document.getElementById('login-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const email = emailInput.value.trim();
+  const password = passwordInput.value;
+  if (!email || !password || loginButton.disabled) return;
+  loginButton.disabled = true;
+  loginMessage.textContent = '들어가는 중…';
+  try {
+    await signInWithPassword(email, password);
+    try { localStorage.setItem(LAST_EMAIL_KEY, email); } catch (err) { console.error(err); }
+    passwordInput.value = '';
+    loginMessage.textContent = '';
+  } catch (err) {
+    console.error(err);
+    loginMessage.textContent = err?.status === 429
+      ? '로그인을 너무 자주 시도했어요. 잠시 뒤 다시 해주세요.'
+      : '이메일이나 비밀번호가 맞지 않아요. 원장님께 확인해주세요.';
+  } finally {
+    loginButton.disabled = false;
+  }
+});
+```
 
-`## 데이터베이스` 절 아래에 덧붙인다.
+- [ ] **Step 6: 확인**
+
+- Run: `npm test` → Expected: PASS, 49개
+- Run: `node --check js/main.js && node --check js/store.js` → Expected: 출력 없음
+- Run: `grep -rn "sendLoginLink\|signInWithOtp" js/` → Expected: 결과 없음
+- 로컬 서버를 켜고 로그아웃한 상태에서 확인한다.
+  - 일부러 틀린 비밀번호로 로그인 → Expected: "이메일이나 비밀번호가 맞지 않아요" 안내가 뜨고 화면은 로그인 상태로 넘어가지 않는다
+  - 맞는 비밀번호로 로그인 → Expected: 목록 화면이 뜨고 헤더에 `접수실 님`이 보인다
+  - 새로고침 → Expected: 다시 로그인하라고 하지 않는다
+  - 로그아웃 → Expected: 로그인 화면으로 돌아오고, 이메일 칸에는 방금 쓴 주소가 남아 있고 비밀번호 칸은 비어 있다
+
+- [ ] **Step 7: 문서에 적기**
+
+`README.md`의 `## 데이터베이스` 절 아래에 덧붙인다.
 
 ```markdown
-## 직원 계정 추가
+## 로그인 계정
 
-1. Supabase 대시보드 → Authentication → Users → Add user → Create new user.
-   직원 이메일을 넣고 **Auto Confirm User**를 켠 뒤 만듭니다. 비밀번호는 쓰지 않습니다.
-2. `allowed_emails` 표에 그 이메일과 표시 이름을 넣습니다. 표시 이름은 통화 기록의 담당자와 화면 인사말에 쓰입니다.
-3. 직원이 앱에서 자기 이메일로 로그인 링크를 받아 같은 PC에서 링크를 누릅니다.
+접수실에서 공용 계정 하나로 들어갑니다. 계정 이메일과 비밀번호는 Supabase 대시보드의
+Authentication → Users에서 관리합니다. 비밀번호는 저장소나 문서에 적지 않고 직원에게 직접 알려줍니다.
 
-직원이 그만두면 `allowed_emails`에서 그 줄을 지웁니다. 계정이 남아 있어도 환자 정보를 읽지 못합니다.
+- 비밀번호를 바꾸려면 대시보드에서 그 계정의 비밀번호를 변경합니다. 바꾸면 직원에게 새 비밀번호를 알려줍니다.
+- 직원이 그만두는 등 계정을 정리해야 하면 비밀번호를 바꿉니다.
+- 로그인할 수 있는 계정은 `allowed_emails` 표에 있는 이메일뿐입니다. 표에서 지우면 로그인해도 환자 정보를 읽지 못합니다.
+- 통화 기록의 담당자는 공용 계정의 표시 이름으로 남습니다. 사람별로 나누려면 계정을 나눠야 합니다.
 ```
 
-- [ ] **Step 7: 커밋**
+`CLAUDE.md`의 "## 데이터와 보안" 절에서 로그인 줄을 아래로 바꾼다.
+
+```markdown
+- 로그인은 공용 계정 하나로 하고 비밀번호는 Supabase 대시보드에서 관리한다. 비밀번호를 코드·문서·커밋에 적지 않는다. 화면에서만 막는 방식은 쓰지 않는다. 허용 계정은 `allowed_emails` 표로 관리하고 표시 이름은 `display_name`에 둔다.
+```
+
+- [ ] **Step 8: 커밋**
 
 ```bash
-git add README.md
+git add js/store.js js/main.js index.html README.md CLAUDE.md
 git commit -F - <<'MSG'
-docs: 직원 계정 추가 절차 안내
+feat: 공용 계정 비밀번호 로그인
+
+이메일 링크 대신 비밀번호로 들어간다. 계정은 접수실 공용 하나를 쓰고,
+환자 정보는 그대로 행 수준 보안이 지킨다. 마지막 이메일만 브라우저에 기억한다.
 
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
 MSG
