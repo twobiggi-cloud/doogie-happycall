@@ -15,10 +15,11 @@
   <div class="login-card">
     <div class="brand-mark">🌿</div>
     <h1>두기 해피콜</h1>
-    <p>허용된 이메일로 로그인 링크를 받으세요.</p>
+    <p>공용 계정 이메일과 비밀번호로 들어갑니다.</p>
     <form id="login-form">
-      <input type="email" id="login-email" class="search-input" placeholder="이메일" autocomplete="email" required>
-      <button type="submit" class="btn btn-primary">로그인 링크 받기</button>
+      <input type="email" id="login-email" class="search-input" placeholder="이메일" autocomplete="username" required>
+      <input type="password" id="login-password" class="search-input" placeholder="비밀번호" autocomplete="current-password" required>
+      <button type="submit" class="btn btn-primary">로그인</button>
     </form>
     <p id="login-message" class="login-message"></p>
   </div>

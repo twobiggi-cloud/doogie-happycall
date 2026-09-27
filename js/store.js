@@ -22,11 +22,8 @@ export function onAuthChange(callback) {
   supabase.auth.onAuthStateChange((_event, session) => callback(session));
 }
 
-export async function sendLoginLink(email) {
-  const { error } = await supabase.auth.signInWithOtp({
-    email,
-    options: { shouldCreateUser: false, emailRedirectTo: window.location.origin },
-  });
+export async function signInWithPassword(email, password) {
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
   check(error);
 }
 
