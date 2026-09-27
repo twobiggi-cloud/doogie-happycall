@@ -40,7 +40,7 @@ const PATIENT_MAX = 5000;
 const PATIENT_SELECT = `
   id, name, phone, condition, condition_label, created_at,
   prescriptions (
-    id, prescribed_on, days, runout_on, status, closed_reason, created_at,
+    id, prescribed_on, shipped_on, days, runout_on, status, closed_reason, created_at,
     calls (
       id, kind, due_on, status, no_answer_count, result, note, visit_needed, visit_booked,
       escalation, escalated_at, done_at,

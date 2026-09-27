@@ -22,6 +22,7 @@ npm test
 - Supabase 프로젝트 `yblqrtwbvqrshqmnizij`
 - 스키마는 `supabase/migrations`에 순서대로 있습니다
 - 로그인 허용 이메일은 `allowed_emails` 테이블에서 관리합니다
+- 처방에는 처방일과 약 발송일이 따로 있습니다. 콜 날짜는 발송일 기준이고, 발송일이 비어 있으면 '발송 대기'입니다
 - 앱에는 publishable 키만 들어 있습니다. service_role 키는 넣지 않습니다
 
 ## 로그인 계정
