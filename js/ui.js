@@ -1,10 +1,14 @@
 import * as store from './store.js';
 import {
   todayYMD, overdueDays, planCalls, hasPastCall, decideNoAnswer, decideSmsSent, decideAnswered,
-  defaultVisitNeededFor,
+  defaultVisitNeededFor, isCallDay,
 } from './schedule.js';
 import {
+  monthKeyOf, shiftMonth, monthLabel, monthGrid, calendarDateOf, bucketByDate, undatedViews, countsOf, summarize,
+} from './calendar.js';
+import {
   todayCalls, upcomingCalls, escalationCalls, visitCalls, activePrescriptionCount, preRunoutCall, awaitingShipment,
+  callViews,
 } from './model.js';
 import {
   CONDITION_LABELS, RESULT_LABELS, KIND_LABELS, CALL_STATUS_LABELS, DAYS_PRESETS, DEFAULT_SCRIPTS,
@@ -12,9 +16,12 @@ import {
   fillTemplate, buildEscalationText, buildCallScript, staffLabel,
 } from './texts.js';
 
-const TABS = ['escalation', 'today', 'shipment', 'visit', 'all', 'scripts'];
+const TABS = ['escalation', 'today', 'shipment', 'calendar', 'visit', 'all', 'scripts'];
 
-export const state = { patients: [], scripts: {}, tab: 'today', search: '', staff: null, detailPatientId: null };
+export const state = {
+  patients: [], scripts: {}, tab: 'today', search: '', staff: null, detailPatientId: null,
+  month: null, pickedDate: null,
+};
 
 export const $ = (id) => document.getElementById(id);
 
@@ -140,6 +147,7 @@ export function render() {
   if (state.tab === 'escalation') renderEscalation(escalations);
   if (state.tab === 'today') renderToday(todays, today);
   if (state.tab === 'shipment') renderShipment(shipments, today);
+  if (state.tab === 'calendar') renderCalendar(today);
   if (state.tab === 'visit') renderVisit(visits);
   if (state.tab === 'all') renderAll();
   if (state.tab === 'scripts') renderScripts();
@@ -247,6 +255,82 @@ function renderShipment(rows, today) {
         </div>
       </div>`;
   }).join('');
+}
+
+const DOW = ['일', '월', '화', '수', '목', '금', '토'];
+
+function renderCalendar(today) {
+  const month = state.month ?? monthKeyOf(today);
+  state.month = month;
+  const views = callViews(state.patients);
+  const buckets = bucketByDate(views);
+  const waiting = undatedViews(views);
+  const monthViews = views.filter((v) => {
+    const date = calendarDateOf(v.call);
+    return date && monthKeyOf(date) === month;
+  });
+  const sum = summarize(monthViews, today);
+
+  const chips = [
+    `<span class="cal-chip">해피콜<b>${sum.total}</b></span>`,
+    `<span class="cal-chip">완료<b>${sum.done}</b></span>`,
+    `<span class="cal-chip">남음<b>${sum.pending}</b></span>`,
+    `<span class="cal-chip late">지연<b>${sum.late}</b></span>`,
+    `<span class="cal-chip">문자 마감<b>${sum.closed}</b></span>`,
+    sum.rate === null ? '' : `<span class="cal-chip">연결률<b>${sum.rate}%</b></span>`,
+  ].join('');
+
+  const cells = monthGrid(month).map((week) => week.map((date) => {
+    const list = buckets.get(date) ?? [];
+    const counts = countsOf(list);
+    const late = list.some((v) => v.call.status === 'pending' && v.call.dueOn && v.call.dueOn < today);
+    const classes = ['cal-cell'];
+    if (monthKeyOf(date) !== month) classes.push('other');
+    if (!isCallDay(date)) classes.push('rest');
+    if (date === today) classes.push('today');
+    if (date === state.pickedDate) classes.push('picked');
+    if (late) classes.push('has-late');
+    if (counts.total > 0 && counts.pending === 0 && counts.sms === 0) classes.push('all-done');
+    const line = counts.total === 0 ? '' : `<div class="n">${counts.total}건 · ${counts.done}완료</div>`;
+    return `<button class="${classes.join(' ')}" data-action="cal-day" data-id="${date}">
+      <span class="d">${Number(date.slice(8))}</span>${line}</button>`;
+  }).join('')).join('');
+
+  $('panel-calendar').innerHTML = `
+    <div class="cal-head">
+      <button class="btn btn-sm" data-action="cal-prev">← 지난달</button>
+      <div class="cal-title">${monthLabel(month)}</div>
+      <button class="btn btn-sm" data-action="cal-next">다음달 →</button>
+      <button class="btn btn-ghost btn-sm" data-action="cal-today">이번달</button>
+    </div>
+    <div class="cal-summary">${chips}</div>
+    ${waiting.length === 0 ? '' : `<div class="banner">📨 날짜 없이 문자 대기 중인 콜 ${waiting.length}건이 있어요. '오늘 콜' 탭에서 처리해주세요.</div>`}
+    <div class="cal-grid">${DOW.map((d) => `<div class="cal-dow">${d}</div>`).join('')}${cells}</div>
+    <div class="cal-day" id="cal-day"></div>`;
+
+  renderCalendarDay(buckets, today);
+}
+
+function renderCalendarDay(buckets, today) {
+  const date = state.pickedDate;
+  if (!date) {
+    $('cal-day').innerHTML = '<div class="empty">날짜를 누르면 그날 해피콜이 여기 보여요.</div>';
+    return;
+  }
+  const list = (buckets.get(date) ?? []).slice().sort((a, b) => a.patient.name.localeCompare(b.patient.name, 'ko'));
+  const c = countsOf(list);
+  const head = `
+    <div class="section-title">${formatKoreanDate(date)}</div>
+    <div class="cal-summary">
+      <span class="cal-chip">대상<b>${c.total}</b></span>
+      <span class="cal-chip">완료<b>${c.done}</b></span>
+      <span class="cal-chip">문자 마감<b>${c.closed}</b></span>
+      <span class="cal-chip">남음<b>${c.pending}</b></span>
+    </div>`;
+  const body = list.length === 0
+    ? '<div class="empty">이날은 잡힌 해피콜이 없어요.</div>'
+    : list.map((v) => callCard(v, today)).join('');
+  $('cal-day').innerHTML = head + body;
 }
 
 function renderVisit(list) {
@@ -768,6 +852,10 @@ export function onAppClick(e) {
     const row = awaitingShipment(state.patients, todayYMD()).find((v) => v.prescription.id === id);
     if (row) openShipModal(row);
   }
+  if (action === 'cal-prev') { state.month = shiftMonth(state.month ?? monthKeyOf(todayYMD()), -1); state.pickedDate = null; render(); }
+  if (action === 'cal-next') { state.month = shiftMonth(state.month ?? monthKeyOf(todayYMD()), 1); state.pickedDate = null; render(); }
+  if (action === 'cal-today') { state.month = monthKeyOf(todayYMD()); state.pickedDate = todayYMD(); render(); }
+  if (action === 'cal-day') { state.pickedDate = state.pickedDate === id ? null : id; render(); }
   if (action === 'escalate') openEscalationModal(findView(id));
   if (action === 'visit-booked') run(() => store.markVisitBooked(id), '예약 완료로 표시했어요.');
   if (action === 'save-script') run(() => store.saveScript(id, $(`script-${id}`).value), '스크립트를 저장했어요.');
