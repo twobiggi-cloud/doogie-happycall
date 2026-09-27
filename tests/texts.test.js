@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   DAYS_PRESETS, DEFAULT_SCRIPTS, normalizePhone, isValidPhone, formatPhone, isValidDays,
-  conditionText, formatKoreanDate, fillTemplate, buildEscalationText, buildCallScript,
+  conditionText, formatKoreanDate, fillTemplate, buildEscalationText, buildCallScript, staffLabel,
 } from '../js/texts.js';
 
 test('처방 일수 버튼은 30, 15, 10', () => {
@@ -78,4 +78,11 @@ test('기본 스크립트는 여섯 개이고 자리표시가 들어 있다', ()
   );
   assert.match(DEFAULT_SCRIPTS.sms_no_answer, /\{name\}/);
   assert.match(DEFAULT_SCRIPTS.closing_pre_runout, /\{runout\}/);
+});
+
+test('staffLabel은 이름이 있으면 이름, 없으면 이메일 앞부분', () => {
+  assert.equal(staffLabel({ email: 'kim@clinic.example', name: '김직원' }), '김직원');
+  assert.equal(staffLabel({ email: 'kim@clinic.example', name: '' }), 'kim');
+  assert.equal(staffLabel({ email: 'kim@clinic.example', name: '   ' }), 'kim');
+  assert.equal(staffLabel(null), '');
 });

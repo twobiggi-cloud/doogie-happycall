@@ -91,3 +91,11 @@ export function buildCallScript({ condition, kind, name, runoutOn, scripts }) {
   });
   return `${body}\n\n[${KIND_LABELS[kind]} 마무리]\n${closing}`;
 }
+
+export function staffLabel(staff) {
+  if (!staff) return '';
+  const name = String(staff.name ?? '').trim();
+  if (name) return name;
+  const email = String(staff.email ?? '');
+  return email.includes('@') ? email.split('@')[0] : email;
+}

@@ -9,12 +9,12 @@ import {
 import {
   CONDITION_LABELS, RESULT_LABELS, KIND_LABELS, CALL_STATUS_LABELS, DAYS_PRESETS, DEFAULT_SCRIPTS,
   normalizePhone, isValidPhone, formatPhone, isValidDays, conditionText, formatKoreanDate,
-  fillTemplate, buildEscalationText, buildCallScript,
+  fillTemplate, buildEscalationText, buildCallScript, staffLabel,
 } from './texts.js';
 
 const TABS = ['escalation', 'today', 'visit', 'all', 'scripts'];
 
-export const state = { patients: [], scripts: {}, tab: 'today', search: '', staffName: '', detailPatientId: null };
+export const state = { patients: [], scripts: {}, tab: 'today', search: '', staff: null, detailPatientId: null };
 
 export const $ = (id) => document.getElementById(id);
 
@@ -60,9 +60,11 @@ export function findPatient(id) {
 
 export async function refresh() {
   try {
-    const [patients, scripts] = await Promise.all([store.loadAll(), store.loadScripts()]);
+    const [patients, scripts, staff] = await Promise.all([store.loadAll(), store.loadScripts(), store.loadMyStaff()]);
     state.patients = patients;
     state.scripts = scripts;
+    state.staff = staff;
+    $('staff-name').textContent = staffLabel(staff) ? `${staffLabel(staff)} 님` : '';
     render();
     if (state.detailPatientId) openDetailModal(findPatient(state.detailPatientId));
   } catch (err) {
@@ -81,7 +83,12 @@ export async function run(action, successMsg) {
       await action();
     } catch (err) {
       console.error(err);
-      toast('저장하지 못했어요. 다시 시도해주세요.');
+      if (store.isConflictError(err)) {
+        toast('다른 직원이 먼저 처리했어요. 최신 내용으로 다시 불러옵니다.');
+        await refresh();
+      } else {
+        toast('저장하지 못했어요. 다시 시도해주세요.');
+      }
       return false;
     }
     if (successMsg) toast(successMsg);
@@ -519,7 +526,6 @@ export function openCallModal(view) {
     <div class="field"><label>통화 메모</label><textarea id="cl-note" placeholder="증상 경과, 특이사항"></textarea></div>
     <div class="field"><label class="checkbox-row"><input type="checkbox" id="cl-visit"> 내원 예약이 필요해요</label></div>
     <div class="field"><label class="checkbox-row"><input type="checkbox" id="cl-close-early"> 이 처방 조기 마감 (복용 중단 등)</label></div>
-    <div class="field"><label>담당 직원</label><input type="text" id="cl-staff" value="${esc(state.staffName)}"></div>
     <div class="modal-footer">
       <button class="btn" data-action="close">취소</button>
       <button class="btn btn-primary" id="cl-submit">저장</button>
@@ -535,7 +541,6 @@ export function openCallModal(view) {
   });
 
   $('cl-submit').addEventListener('click', async () => {
-    state.staffName = $('cl-staff').value.trim();
     const d = decideAnswered(call, {
       result,
       note: $('cl-note').value.trim(),
@@ -543,7 +548,7 @@ export function openCallModal(view) {
       closeEarly: $('cl-close-early').checked,
     });
     const ok = await run(() => store.saveCallOutcome(call.id, {
-      outcome: 'answered', note: d.note, staffName: state.staffName, status: d.status, dueOn: null,
+      expectedStatus: call.status, outcome: 'answered', note: d.note, status: d.status, dueOn: null,
       noAnswerCount: call.noAnswerCount, result: d.result, visitNeeded: d.visitNeeded,
       escalation: d.escalation, closePrescription: d.closePrescription,
     }), d.escalation === 'pending' ? "저장했어요. '원장 전달 필요'에 올라갔어요." : '저장했어요.');
@@ -568,7 +573,7 @@ export async function handleNoAnswer(view) {
     sms_pending: '',
   }[d.status];
   const ok = await run(() => store.saveCallOutcome(call.id, {
-    outcome: 'no_answer', note: '', staffName: state.staffName, status: d.status, dueOn: d.dueOn,
+    expectedStatus: call.status, outcome: 'no_answer', note: '', status: d.status, dueOn: d.dueOn,
     noAnswerCount: d.noAnswerCount, result: null, visitNeeded: call.visitNeeded,
     escalation: call.escalation, closePrescription: null,
   }), message);
@@ -598,7 +603,7 @@ export function openSmsModal(view) {
   $('sms-sent').addEventListener('click', async () => {
     const d = decideSmsSent(call);
     const ok = await run(() => store.saveCallOutcome(call.id, {
-      outcome: null, note: '', staffName: state.staffName, status: d.status, dueOn: null,
+      expectedStatus: call.status, outcome: null, note: '', status: d.status, dueOn: null,
       noAnswerCount: call.noAnswerCount, result: null, visitNeeded: call.visitNeeded,
       escalation: call.escalation, closePrescription: d.closePrescription,
     }), '문자 보냄으로 마감했어요.');
@@ -667,5 +672,7 @@ export function startApp() {
 export function stopApp() {
   state.patients = [];
   state.scripts = {};
+  state.staff = null;
+  $('staff-name').textContent = '';
   closeModal();
 }

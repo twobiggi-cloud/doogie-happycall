@@ -61,6 +61,16 @@ export async function loadScripts() {
   return Object.fromEntries(data.map((r) => [r.key, r.text]));
 }
 
+export async function loadMyStaff() {
+  const { data, error } = await supabase
+    .from('allowed_emails')
+    .select('email, display_name')
+    .limit(1)
+    .maybeSingle();
+  check(error);
+  return data ? { email: data.email, name: data.display_name ?? '' } : null;
+}
+
 // ---- 쓰기 ----
 
 export async function findPatientByPhone(phone) {
@@ -91,9 +101,9 @@ export async function registerPrescription({ phone, name, condition, conditionLa
 export async function saveCallOutcome(callId, o) {
   const { error } = await supabase.rpc('save_call_outcome', {
     p_call_id: callId,
+    p_expected_status: o.expectedStatus,
     p_outcome: o.outcome ?? null,
     p_note: o.note ?? '',
-    p_staff_name: o.staffName ?? '',
     p_status: o.status,
     p_due_on: o.dueOn ?? null,
     p_no_answer_count: o.noAnswerCount,
@@ -105,17 +115,31 @@ export async function saveCallOutcome(callId, o) {
   check(error);
 }
 
+// 다른 직원이 먼저 처리했을 때 나는 오류인지 구분한다.
+export function isConflictError(err) {
+  return Boolean(err && typeof err.message === 'string' && err.message.includes('콜 상태가 바뀌었습니다'));
+}
+
 export async function markEscalationSent(callId) {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('calls')
     .update({ escalation: 'sent', escalated_at: new Date().toISOString() })
-    .eq('id', callId);
+    .eq('id', callId)
+    .eq('escalation', 'pending')
+    .select('id');
   check(error);
+  if (!data || data.length === 0) throw new Error('콜 상태가 바뀌었습니다');
 }
 
 export async function markVisitBooked(callId) {
-  const { error } = await supabase.from('calls').update({ visit_booked: true }).eq('id', callId);
+  const { data, error } = await supabase
+    .from('calls')
+    .update({ visit_booked: true })
+    .eq('id', callId)
+    .eq('visit_booked', false)
+    .select('id');
   check(error);
+  if (!data || data.length === 0) throw new Error('콜 상태가 바뀌었습니다');
 }
 
 export async function saveScript(key, text) {
