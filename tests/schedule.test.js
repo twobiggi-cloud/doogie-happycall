@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   addDays, daysBetween, isoDay, isCallDay, pullBackToCallDay, nextCallDayAfter, todayYMD,
   runoutOn, planCalls, hasPastCall, decideNoAnswer, decideSmsSent, decideAnswered,
-  defaultVisitNeededFor, isOnTodayList, overdueDays, preRunoutOffsetFor, isShipmentOverdue,
+  defaultVisitNeededFor, isOnTodayList, overdueDays, preRunoutOffsetFor, isShipmentOverdue, replanPendingCalls, dueDateWarning,
 } from '../js/schedule.js';
 
 test('addDays는 달이 바뀌어도 맞게 센다', () => {
@@ -230,4 +230,36 @@ test('처방 후 닷새가 지나도록 발송일이 없으면 확인 대상', (
   assert.equal(isShipmentOverdue('2026-09-22', '2026-09-27'), true);
   assert.equal(isShipmentOverdue('2026-09-23', '2026-09-27'), false);
   assert.equal(isShipmentOverdue('2026-09-27', '2026-09-27'), false);
+});
+
+test('끝난 콜은 다시 잡지 않고 대기 콜만 다시 계산한다', () => {
+  const existing = [
+    { kind: 'mid', status: 'done', dueOn: '2026-10-06' },
+    { kind: 'pre_runout', status: 'pending', dueOn: '2026-10-19' },
+  ];
+  const out = replanPendingCalls(existing, '2026-10-05', 30);
+  assert.equal(out.runoutOn, '2026-11-04');
+  assert.deepEqual(out.calls, [{ kind: 'pre_runout', dueOn: '2026-10-31' }]);
+});
+
+test('끝난 콜이 없으면 처음부터 다시 잡는다', () => {
+  const out = replanPendingCalls([{ kind: 'pre_runout', status: 'pending', dueOn: '2026-10-19' }], '2026-10-05', 7);
+  assert.equal(out.runoutOn, '2026-10-12');
+  assert.deepEqual(out.calls, [{ kind: 'pre_runout', dueOn: '2026-10-10' }]);
+});
+
+test('투약일수를 줄이면 대기 중인 중간 콜은 사라진다', () => {
+  const existing = [
+    { kind: 'mid', status: 'pending', dueOn: '2026-10-20' },
+    { kind: 'pre_runout', status: 'pending', dueOn: '2026-10-31' },
+  ];
+  const out = replanPendingCalls(existing, '2026-10-05', 10);
+  assert.deepEqual(out.calls.map((c) => c.kind), ['pre_runout']);
+});
+
+test('날짜 경고는 쉬는 요일과 소진일 이후', () => {
+  assert.equal(dueDateWarning('2026-10-11', '2026-10-20'), '목요일과 일요일에는 콜을 잡지 않아요.');
+  assert.equal(dueDateWarning('2026-10-21', '2026-10-20'), '소진일보다 늦은 날짜예요.');
+  assert.equal(dueDateWarning('2026-10-20', '2026-10-20'), null);
+  assert.equal(dueDateWarning('2026-10-20', null), null);
 });

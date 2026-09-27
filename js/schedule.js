@@ -137,3 +137,16 @@ export function isOnTodayList(call, today) {
 export function overdueDays(dueOn, today) {
   return Math.max(0, daysBetween(dueOn, today));
 }
+
+// 일정을 고칠 때 쓴다. 이미 통화하거나 마감한 종류의 콜은 다시 만들지 않는다.
+export function replanPendingCalls(existingCalls, shippedOn, days) {
+  const finished = new Set((existingCalls ?? []).filter((c) => c.status !== 'pending').map((c) => c.kind));
+  const plan = planCalls(shippedOn, days);
+  return { runoutOn: plan.runoutOn, calls: plan.calls.filter((c) => !finished.has(c.kind)) };
+}
+
+export function dueDateWarning(dueOn, runoutOn) {
+  if (!isCallDay(dueOn)) return '목요일과 일요일에는 콜을 잡지 않아요.';
+  if (runoutOn && dueOn > runoutOn) return '소진일보다 늦은 날짜예요.';
+  return null;
+}
