@@ -30,3 +30,45 @@ export function monthGrid(ym) {
   }
   return weeks;
 }
+
+// 콜이 달력에서 놓이는 날. 예정일이 먼저고, 부재로 마감돼 예정일이 지워진 콜은 처리한 날에 둔다.
+export function calendarDateOf(call) {
+  if (call.dueOn) return call.dueOn;
+  if (call.doneAt) return String(call.doneAt).slice(0, 10);
+  return null;
+}
+
+export function bucketByDate(views) {
+  const map = new Map();
+  for (const v of views) {
+    const date = calendarDateOf(v.call);
+    if (!date) continue;
+    if (!map.has(date)) map.set(date, []);
+    map.get(date).push(v);
+  }
+  return map;
+}
+
+// 문자 대기는 날짜가 없다. 달력 위에 따로 보여 놓치지 않게 한다.
+export function undatedViews(views) {
+  return views.filter((v) => calendarDateOf(v.call) === null);
+}
+
+export function countsOf(views) {
+  const counts = { total: views.length, done: 0, closed: 0, pending: 0, sms: 0 };
+  for (const { call } of views) {
+    if (call.status === 'done') counts.done += 1;
+    else if (call.status === 'closed_no_answer') counts.closed += 1;
+    else if (call.status === 'sms_pending') counts.sms += 1;
+    else counts.pending += 1;
+  }
+  return counts;
+}
+
+export function summarize(views, today) {
+  const counts = countsOf(views);
+  const late = views.filter((v) => v.call.status === 'pending' && v.call.dueOn && v.call.dueOn < today).length;
+  const reached = counts.done + counts.closed;
+  const rate = reached === 0 ? null : Math.round((counts.done / reached) * 100);
+  return { ...counts, late, rate };
+}
