@@ -72,6 +72,19 @@ export async function loadScripts() {
   return Object.fromEntries(data.map((r) => [r.key, r.text]));
 }
 
+export async function loadChanges() {
+  const { data, error } = await supabase
+    .from('change_logs')
+    .select('id, target_type, target_id, summary, reason, staff_name, changed_at')
+    .order('changed_at', { ascending: false })
+    .limit(200);
+  check(error);
+  return (data ?? []).map((d) => ({
+    id: d.id, targetType: d.target_type, targetId: d.target_id,
+    summary: d.summary, reason: d.reason, staffName: d.staff_name ?? '', changedAt: d.changed_at,
+  }));
+}
+
 export async function loadMyStaff() {
   const { data, error } = await supabase
     .from('allowed_emails')
@@ -125,6 +138,30 @@ export async function setShippedOn(prescriptionId, { shippedOn, runoutOn, calls 
   check(error);
 }
 
+// 처방의 발송일과 투약 일수를 고친다. 대기 중인 콜만 다시 잡힌다.
+export async function updatePrescriptionSchedule(prescriptionId, { expectedShippedOn, shippedOn, days, runoutOn, calls, reason }) {
+  const { error } = await supabase.rpc('update_prescription_schedule', {
+    p_prescription_id: prescriptionId,
+    p_expected_shipped_on: expectedShippedOn ?? null,
+    p_shipped_on: shippedOn ?? null,
+    p_days: days,
+    p_runout_on: runoutOn ?? null,
+    p_calls: calls ?? [],
+    p_reason: reason,
+  });
+  check(error);
+}
+
+export async function updateCallDueOn(callId, { expectedDueOn, dueOn, reason }) {
+  const { error } = await supabase.rpc('update_call_due_on', {
+    p_call_id: callId,
+    p_expected_due_on: expectedDueOn,
+    p_due_on: dueOn,
+    p_reason: reason,
+  });
+  check(error);
+}
+
 export async function saveCallOutcome(callId, o) {
   const { error } = await supabase.rpc('save_call_outcome', {
     p_call_id: callId,
@@ -143,7 +180,7 @@ export async function saveCallOutcome(callId, o) {
 }
 
 // 다른 직원이 먼저 처리했을 때 나는 오류인지 구분한다.
-const CONFLICT_MESSAGES = ['콜 상태가 바뀌었습니다', '발송일이 이미 입력됐습니다'];
+const CONFLICT_MESSAGES = ['콜 상태가 바뀌었습니다', '발송일이 이미 입력됐습니다', '처방이 이미 바뀌었습니다'];
 
 export function isConflictError(err) {
   return Boolean(err && typeof err.message === 'string'
