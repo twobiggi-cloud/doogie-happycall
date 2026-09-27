@@ -102,3 +102,10 @@ test('발송 대기 목록은 발송일이 없는 진행 중 처방만, 오래�
   assert.equal(rows[0].overdue, true);  // 9월 20일 처방, 7일 지남
   assert.equal(rows[1].overdue, false); // 9월 25일 처방, 2일 지남
 });
+
+test('관계가 없으면 본인으로 본다', () => {
+  const p = toPatient({ id: 'p1', name: '가환자', phone: '01011110001', condition: 'cough', condition_label: null, prescriptions: [] });
+  assert.equal(p.relation, 'self');
+  const q = toPatient({ id: 'p2', name: '나환자', phone: '01011110001', condition: 'cough', condition_label: null, relation: 'child', prescriptions: [] });
+  assert.equal(q.relation, 'child');
+});

@@ -6,6 +6,12 @@ export const KIND_LABELS = { mid: '중간 콜', pre_runout: '소진 전 콜' };
 export const CALL_STATUS_LABELS = { pending: '대기', done: '완료', sms_pending: '문자 대기', closed_no_answer: '부재 마감' };
 export const DAYS_PRESETS = [30, 15, 10, 7];
 
+export const RELATION_LABELS = {
+  self: '본인', mother: '모', father: '부', grandmother: '조모', grandfather: '조부', child: '자녀', other: '기타',
+};
+
+export const RELATION_PRESETS = Object.entries(RELATION_LABELS);
+
 export const DEFAULT_SCRIPTS = {
   urticaria: `안녕하세요, {name}님. 두기한의원입니다. 처방해드린 약 잘 드시고 계신지 확인차 연락드렸어요. 통화 잠시 괜찮으실까요?
 
@@ -98,4 +104,20 @@ export function staffLabel(staff) {
   if (name) return name;
   const email = String(staff.email ?? '');
   return email.includes('@') ? email.split('@')[0] : email;
+}
+
+// 화면에 쓰는 이름. 전화할 때 누구 이야기인지 바로 알 수 있게 관계를 붙인다.
+export function patientLabel(patient) {
+  const name = String(patient?.name ?? '');
+  const relation = patient?.relation ?? 'self';
+  if (!relation || relation === 'self') return name;
+  return `${name} (${RELATION_LABELS[relation] ?? RELATION_LABELS.other})`;
+}
+
+// 통화와 문자에서 부르는 말. 본인이 아니면 전화를 받는 사람은 보호자다.
+export function addressName(patient) {
+  const name = String(patient?.name ?? '');
+  const relation = patient?.relation ?? 'self';
+  if (!relation || relation === 'self') return name;
+  return `${name}님 보호자`;
 }

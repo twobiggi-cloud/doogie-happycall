@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   DAYS_PRESETS, DEFAULT_SCRIPTS, normalizePhone, isValidPhone, formatPhone, isValidDays,
-  conditionText, formatKoreanDate, fillTemplate, buildEscalationText, buildCallScript, staffLabel,
+  conditionText, formatKoreanDate, fillTemplate, buildEscalationText, buildCallScript, staffLabel, RELATION_LABELS, patientLabel, addressName,
 } from '../js/texts.js';
 
 test('처방 일수 버튼은 30, 15, 10, 7', () => {
@@ -85,4 +85,21 @@ test('staffLabel은 이름이 있으면 이름, 없으면 이메일 앞부분', 
   assert.equal(staffLabel({ email: 'kim@clinic.example', name: '' }), 'kim');
   assert.equal(staffLabel({ email: 'kim@clinic.example', name: '   ' }), 'kim');
   assert.equal(staffLabel(null), '');
+});
+
+test('관계 이름은 일곱 개', () => {
+  assert.deepEqual(Object.keys(RELATION_LABELS), ['self', 'mother', 'father', 'grandmother', 'grandfather', 'child', 'other']);
+  assert.equal(RELATION_LABELS.child, '자녀');
+});
+
+test('본인이면 이름만, 아니면 관계를 붙인다', () => {
+  assert.equal(patientLabel({ name: '홍길동', relation: 'self' }), '홍길동');
+  assert.equal(patientLabel({ name: '홍길동' }), '홍길동');
+  assert.equal(patientLabel({ name: '홍아이', relation: 'child' }), '홍아이 (자녀)');
+  assert.equal(patientLabel({ name: '홍모', relation: 'mother' }), '홍모 (모)');
+});
+
+test('본인이 아니면 보호자를 부른다', () => {
+  assert.equal(addressName({ name: '홍길동', relation: 'self' }), '홍길동');
+  assert.equal(addressName({ name: '홍아이', relation: 'child' }), '홍아이님 보호자');
 });

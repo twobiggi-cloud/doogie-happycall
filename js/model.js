@@ -45,6 +45,7 @@ export function toPatient(row) {
     id: row.id,
     name: row.name,
     phone: row.phone,
+    relation: row.relation ?? 'self',
     condition: row.condition,
     conditionLabel: row.condition_label ?? '',
     prescriptions: (row.prescriptions ?? []).map((r) => toPrescription(r, row.id)).sort(newestFirst('prescribedOn')),
