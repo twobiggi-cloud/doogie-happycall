@@ -71,7 +71,7 @@ set local role authenticated;
 select set_config('request.jwt.claims', '{"role":"authenticated","email":"<허용이메일>"}', true);
 ```
 
-- [ ] **Step 1: 실패하는 시험 실행**
+- [x] **Step 1: 실패하는 시험 실행**
 
 MCP `execute_sql` (project_id `yblqrtwbvqrshqmnizij`), 허용 계정 앞부분을 붙이고:
 
@@ -81,7 +81,7 @@ select email, display_name from public.allowed_emails;
 
 Expected: ERROR `column "display_name" does not exist`
 
-- [ ] **Step 2: 마이그레이션 파일 쓰기**
+- [x] **Step 2: 마이그레이션 파일 쓰기**
 
 `supabase/migrations/004_staff_name.sql`:
 
@@ -103,17 +103,17 @@ create policy "내 계정만 읽기"
   using (email = lower(coalesce(auth.jwt() ->> 'email', '')));
 ```
 
-- [ ] **Step 3: 적용**
+- [x] **Step 3: 적용**
 
 MCP `apply_migration` — project_id `yblqrtwbvqrshqmnizij`, name `staff_name`, query는 위 파일 전체.
 Expected: `{"success":true}`
 
-- [ ] **Step 4: 허용 계정이 자기 행을 읽는지**
+- [x] **Step 4: 허용 계정이 자기 행을 읽는지**
 
 허용 계정 앞부분 + `select email, display_name from public.allowed_emails;`
 Expected: 1행. `display_name`이 비어 있지 않다.
 
-- [ ] **Step 5: 다른 이메일은 못 읽는지**
+- [x] **Step 5: 다른 이메일은 못 읽는지**
 
 ```sql
 set local role authenticated;
@@ -123,7 +123,7 @@ select count(*) as visible from public.allowed_emails;
 
 Expected: `visible = 0`
 
-- [ ] **Step 6: 로그인 안 하면 못 읽는지**
+- [x] **Step 6: 로그인 안 하면 못 읽는지**
 
 ```sql
 set local role anon;
@@ -132,12 +132,12 @@ select count(*) from public.allowed_emails;
 
 Expected: ERROR `permission denied for table allowed_emails`
 
-- [ ] **Step 7: 보안 점검**
+- [x] **Step 7: 보안 점검**
 
 MCP `get_advisors` type `security`.
 Expected: 새 WARN이 없다. `allowed_emails`의 "RLS Enabled No Policy" INFO는 이번 정책으로 사라진다. `auth_leaked_password_protection` WARN은 이전부터 있던 계정 설정이라 그대로 있어도 된다.
 
-- [ ] **Step 8: 커밋**
+- [x] **Step 8: 커밋**
 
 ```bash
 git add supabase/migrations/004_staff_name.sql
@@ -165,7 +165,7 @@ MSG
   - `p_expected_status`와 콜의 현재 상태가 다르면 `콜 상태가 바뀌었습니다` 예외를 낸다.
   - 시도 기록은 콜 저장에 성공한 뒤에만 들어간다.
 
-- [ ] **Step 1: 실패하는 시험 실행**
+- [x] **Step 1: 실패하는 시험 실행**
 
 허용 계정 앞부분 + 아래. 아직 옛 함수(인자 11개, 두 번째가 `p_outcome`)만 있으므로 실패한다.
 
@@ -177,7 +177,7 @@ select public.save_call_outcome(
 
 Expected: ERROR. 인자 이름이 달라 `function public.save_call_outcome(...) does not exist` 또는 콜을 찾지 못한다는 옛 함수의 오류가 난다. 어느 쪽이든 실제 메시지를 보고서에 적는다.
 
-- [ ] **Step 2: 마이그레이션 파일 쓰기**
+- [x] **Step 2: 마이그레이션 파일 쓰기**
 
 `supabase/migrations/005_save_call_outcome_guard.sql`:
 
@@ -245,12 +245,12 @@ revoke all on function public.save_call_outcome(uuid, text, text, text, text, da
 grant execute on function public.save_call_outcome(uuid, text, text, text, text, date, int, text, boolean, text, text) to authenticated;
 ```
 
-- [ ] **Step 3: 적용**
+- [x] **Step 3: 적용**
 
 MCP `apply_migration` — name `save_call_outcome_guard`, query는 위 파일 전체.
 Expected: `{"success":true}`
 
-- [ ] **Step 4: 시험용 데이터 만들기**
+- [x] **Step 4: 시험용 데이터 만들기**
 
 허용 계정 앞부분 + 아래. 오늘이 목·일이면 `due_on`이 규칙에 걸리므로 고정 날짜를 쓴다.
 
@@ -265,7 +265,7 @@ where p.phone = '01099990001' order by c.kind;
 
 Expected: 2행, 둘 다 `pending`. `mid` 콜의 id를 다음 단계에서 쓴다.
 
-- [ ] **Step 5: 상태가 맞으면 저장되고 담당자가 자동으로 들어가는지**
+- [x] **Step 5: 상태가 맞으면 저장되고 담당자가 자동으로 들어가는지**
 
 허용 계정 앞부분 + 아래. `<mid콜id>`는 Step 4에서 받은 값이다.
 
@@ -279,7 +279,7 @@ from calls c where c.id = '<mid콜id>'::uuid;
 
 Expected: `status = done`, `result = improved`, `note = 경과 좋음`, `staff`가 비어 있지 않다(허용 계정의 `display_name`), `attempts = 1`.
 
-- [ ] **Step 6: 상태가 다르면 막히는지**
+- [x] **Step 6: 상태가 다르면 막히는지**
 
 허용 계정 앞부분 + 같은 콜에 다시 `pending`을 기대 상태로 보낸다.
 
@@ -297,7 +297,7 @@ select count(*) as attempts from call_attempts where call_id = '<mid콜id>'::uui
 
 Expected: `attempts = 1`
 
-- [ ] **Step 7: 없는 콜도 같은 방식으로 막히는지**
+- [x] **Step 7: 없는 콜도 같은 방식으로 막히는지**
 
 허용 계정 앞부분 + 아래.
 
@@ -307,7 +307,7 @@ select public.save_call_outcome('00000000-0000-0000-0000-000000000000'::uuid, 'p
 
 Expected: ERROR `콜 상태가 바뀌었습니다`
 
-- [ ] **Step 8: 허용되지 않은 이메일은 저장 못 하는지**
+- [x] **Step 8: 허용되지 않은 이메일은 저장 못 하는지**
 
 ```sql
 set local role authenticated;
@@ -317,7 +317,7 @@ select public.save_call_outcome('<pre_runout콜id>'::uuid, 'pending', 'answered'
 
 Expected: ERROR `콜 상태가 바뀌었습니다` (행 수준 보안 때문에 콜이 보이지 않아 갱신 대상이 없다)
 
-- [ ] **Step 9: 정리와 보안 점검**
+- [x] **Step 9: 정리와 보안 점검**
 
 역할을 바꾸지 않고:
 
@@ -330,7 +330,7 @@ Expected: 시험 전 숫자로 돌아온다(예시 환자 3명, 콜 5건).
 
 MCP `get_advisors` type `security` → 새 WARN이 없다.
 
-- [ ] **Step 10: 커밋**
+- [x] **Step 10: 커밋**
 
 ```bash
 git add supabase/migrations/005_save_call_outcome_guard.sql
@@ -360,7 +360,7 @@ MSG
   - `store.isConflictError(err): boolean`
   - `ui.state.staff` — 로그인한 직원 정보. `state.staffName`은 없어진다
 
-- [ ] **Step 1: 실패하는 테스트 쓰기**
+- [x] **Step 1: 실패하는 테스트 쓰기**
 
 `tests/texts.test.js` 끝에 덧붙인다. 파일 맨 위 import 목록에 `staffLabel`을 더한다.
 
@@ -373,12 +373,12 @@ test('staffLabel은 이름이 있으면 이름, 없으면 이메일 앞부분', 
 });
 ```
 
-- [ ] **Step 2: 테스트가 실패하는지 확인**
+- [x] **Step 2: 테스트가 실패하는지 확인**
 
 Run: `npm test`
 Expected: FAIL. `staffLabel is not a function` 또는 import 오류.
 
-- [ ] **Step 3: `js/texts.js`에 함수 추가**
+- [x] **Step 3: `js/texts.js`에 함수 추가**
 
 파일 끝에 덧붙인다.
 
@@ -392,12 +392,12 @@ export function staffLabel(staff) {
 }
 ```
 
-- [ ] **Step 4: 테스트 통과 확인**
+- [x] **Step 4: 테스트 통과 확인**
 
 Run: `npm test`
 Expected: PASS, `# fail 0` (49개)
 
-- [ ] **Step 5: `js/store.js` 고치기**
+- [x] **Step 5: `js/store.js` 고치기**
 
 `loadScripts` 아래(`// ---- 쓰기 ----` 줄 앞)에 덧붙인다.
 
@@ -465,7 +465,7 @@ export async function markVisitBooked(callId) {
 }
 ```
 
-- [ ] **Step 6: `index.html`과 `css/app.css` 고치기**
+- [x] **Step 6: `index.html`과 `css/app.css` 고치기**
 
 `index.html`의 헤더에서 아래 줄을
 
@@ -486,7 +486,7 @@ export async function markVisitBooked(callId) {
 .header-staff{font-size:12.5px; color:var(--text-muted); font-weight:600;}
 ```
 
-- [ ] **Step 7: `js/ui.js` 고치기**
+- [x] **Step 7: `js/ui.js` 고치기**
 
 (1) `texts.js` import 목록 끝에 `staffLabel`을 더한다.
 
@@ -578,14 +578,14 @@ export function stopApp() {
 }
 ```
 
-- [ ] **Step 8: 확인**
+- [x] **Step 8: 확인**
 
 - Run: `npm test` → Expected: PASS, 49개, 실패 0
 - Run: `node --check js/ui.js && node --check js/store.js && node --check js/texts.js` → Expected: 출력 없음
 - Run: `grep -n "staffName\|cl-staff" js/ui.js` → Expected: 결과 없음
 - Run: `grep -n "p_staff_name" js/store.js` → Expected: 결과 없음
 
-- [ ] **Step 9: 커밋**
+- [x] **Step 9: 커밋**
 
 ```bash
 git add js/texts.js tests/texts.test.js js/store.js js/ui.js index.html css/app.css
@@ -613,7 +613,7 @@ MSG
 
 **왜 필요한가:** 지금은 한 번에 요청해서 서버 기본 상한인 1000행까지만 온다. 1001번째부터는 오래된 환자의 콜이 화면에서 조용히 사라진다.
 
-- [ ] **Step 1: 현재 동작 확인 (실패 시험)**
+- [x] **Step 1: 현재 동작 확인 (실패 시험)**
 
 MCP `execute_sql` (역할 전환 없이). 예시 환자 1200명을 만든다.
 
@@ -629,7 +629,7 @@ Expected: `total`이 1203(기존 예시 3명 + 1200).
 로컬 서버를 켜고(`npm run serve`) 사용자 Chrome에서 로그인된 화면을 새로고침한 뒤 "전체 환자" 탭의 숫자를 본다.
 Expected: 1000. 즉 203명이 빠진다. 이 숫자를 보고서에 적는다.
 
-- [ ] **Step 2: `js/store.js`의 `loadAll` 교체**
+- [x] **Step 2: `js/store.js`의 `loadAll` 교체**
 
 ```js
 const PATIENT_PAGE_SIZE = 500;
@@ -664,7 +664,7 @@ export async function loadAll() {
 }
 ```
 
-- [ ] **Step 3: `js/ui.js`의 `refresh` 교체**
+- [x] **Step 3: `js/ui.js`의 `refresh` 교체**
 
 ```js
 export async function refresh() {
@@ -684,13 +684,13 @@ export async function refresh() {
 }
 ```
 
-- [ ] **Step 4: 다시 확인**
+- [x] **Step 4: 다시 확인**
 
 - Run: `npm test` → Expected: PASS, 49개
 - Run: `node --check js/store.js && node --check js/ui.js` → Expected: 출력 없음
 - 사용자 Chrome에서 화면을 새로고침한다. Expected: "전체 환자" 탭 숫자가 1203. 콘솔 오류 없음. 목록이 뜨기까지 몇 초 걸려도 된다.
 
-- [ ] **Step 5: 시험 데이터 정리**
+- [x] **Step 5: 시험 데이터 정리**
 
 ```sql
 delete from public.patients where name like '부하시험%';
@@ -701,7 +701,7 @@ Expected: `total = 3`
 
 화면을 새로고침해 "전체 환자"가 3으로 돌아오는지 본다.
 
-- [ ] **Step 6: 커밋**
+- [x] **Step 6: 커밋**
 
 ```bash
 git add js/store.js js/ui.js
@@ -727,12 +727,12 @@ MSG
 - Consumes: Task 1~4 결과
 - Produces: V2.0이 끝났다는 확인 기록
 
-- [ ] **Step 1: 직원 이름이 보이는지**
+- [x] **Step 1: 직원 이름이 보이는지**
 
 로컬 서버를 켜고 사용자 Chrome에서 로그인된 화면을 연다.
 Expected: 헤더의 "+ 처방 등록" 왼쪽에 `<이름> 님`이 보인다.
 
-- [ ] **Step 2: 담당자가 자동으로 들어가는지**
+- [x] **Step 2: 담당자가 자동으로 들어가는지**
 
 예시 환자 하나의 대기 중인 콜에서 "통화 기록"을 열고 저장한다.
 Expected: 창에 담당 직원 입력칸이 없다. 저장 뒤 환자 상세의 시도 기록에 직원 이름이 보인다.
@@ -746,7 +746,7 @@ from call_attempts a order by a.attempted_at desc limit 3;
 
 Expected: 방금 저장한 줄의 `staff_name`이 화면에 보이는 이름과 같다.
 
-- [ ] **Step 3: 동시 저장 보호가 화면에서 동작하는지**
+- [x] **Step 3: 동시 저장 보호가 화면에서 동작하는지**
 
 같은 콜을 화면에 띄워 둔 채, MCP로 그 콜의 상태를 먼저 바꾼다.
 
@@ -769,12 +769,12 @@ where id = (select c.id from calls c join prescriptions r on r.id = c.prescripti
             where p.phone = '01011110001' and c.status = 'done' order by c.due_on limit 1);
 ```
 
-- [ ] **Step 4: 예약 완료와 원장 전달도 두 번 눌리지 않는지**
+- [x] **Step 4: 예약 완료와 원장 전달도 두 번 눌리지 않는지**
 
 "내원 예약 필요" 탭에서 "예약 완료로 표시"를 누른 뒤, 목록이 갱신되기 전에 한 번 더 누른다.
 Expected: 두 번째 누름은 안내만 뜨고 아무것도 바뀌지 않는다.
 
-- [ ] **Step 5: `CLAUDE.md` 고치기**
+- [x] **Step 5: `CLAUDE.md` 고치기**
 
 "## 데이터와 보안" 절의 로그인 항목을 아래로 바꾼다.
 
@@ -790,7 +790,7 @@ Expected: 두 번째 누름은 안내만 뜨고 아무것도 바뀌지 않는다
 1. ~~**기반**: 직원별 로그인과 담당자 자동 기록, 동시 저장 보호, 환자 1000명 제한 해소~~ (2026-09-27 완료)
 ```
 
-- [ ] **Step 6: 커밋**
+- [x] **Step 6: 커밋**
 
 ```bash
 git add CLAUDE.md
@@ -801,7 +801,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
 MSG
 ```
 
-- [ ] **Step 7: 올릴지 묻기**
+- [x] **Step 7: 올릴지 묻기**
 
 `feat/v1`에 올리면 곧바로 실제 배포다. 사용자에게 올려도 되는지 묻고, 허락을 받은 뒤에만 push한다. 올린 뒤에는 배포 주소에서 로그인하고 직원 이름이 보이는지 확인한다.
 
@@ -826,7 +826,7 @@ MSG
 
 **비밀번호 규칙:** 비밀번호는 저장소, 문서, 커밋, 이 계획 어디에도 적지 않는다. 사용자가 대시보드에서 정하고 직원에게 직접 알려준다.
 
-- [ ] **Step 1: 사용자에게 공용 계정 준비 요청**
+- [x] **Step 1: 사용자에게 공용 계정 준비 요청**
 
 아래를 사용자에게 안내한다.
 
@@ -835,7 +835,7 @@ MSG
 3. 그 계정의 비밀번호를 정한다. 기존 계정이면 점 세 개 메뉴의 비밀번호 변경을 쓴다. **열두 자 이상으로, 다른 곳에서 쓰지 않는 값**으로 정한다.
 4. 공용으로 쓸 이메일 주소를 이 대화에 알려준다. 비밀번호는 알려주지 않아도 된다.
 
-- [ ] **Step 2: 허용 목록과 표시 이름 맞추기**
+- [x] **Step 2: 허용 목록과 표시 이름 맞추기**
 
 MCP `execute_sql` (역할 전환 없이). `<공용이메일>`은 사용자가 준 주소다.
 
@@ -848,7 +848,7 @@ select email, display_name from public.allowed_emails order by email;
 
 Expected: 공용 계정 행의 `display_name`이 `접수실`이다.
 
-- [ ] **Step 3: `js/store.js` 고치기**
+- [x] **Step 3: `js/store.js` 고치기**
 
 `sendLoginLink` 함수를 통째로 아래로 바꾼다.
 
@@ -859,7 +859,7 @@ export async function signInWithPassword(email, password) {
 }
 ```
 
-- [ ] **Step 4: `index.html` 로그인 화면 고치기**
+- [x] **Step 4: `index.html` 로그인 화면 고치기**
 
 `login-card` 안의 `<p>`와 `<form>`을 아래로 바꾼다.
 
@@ -872,7 +872,7 @@ export async function signInWithPassword(email, password) {
     </form>
 ```
 
-- [ ] **Step 5: `js/main.js` 고치기**
+- [x] **Step 5: `js/main.js` 고치기**
 
 import 줄과 제출 처리를 아래로 바꾼다. 마지막으로 성공한 이메일은 그 브라우저에만 기억한다.
 
@@ -919,7 +919,7 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
 });
 ```
 
-- [ ] **Step 6: 확인**
+- [x] **Step 6: 확인**
 
 - Run: `npm test` → Expected: PASS, 49개
 - Run: `node --check js/main.js && node --check js/store.js` → Expected: 출력 없음
@@ -930,7 +930,7 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
   - 새로고침 → Expected: 다시 로그인하라고 하지 않는다
   - 로그아웃 → Expected: 로그인 화면으로 돌아오고, 이메일 칸에는 방금 쓴 주소가 남아 있고 비밀번호 칸은 비어 있다
 
-- [ ] **Step 7: 문서에 적기**
+- [x] **Step 7: 문서에 적기**
 
 `README.md`의 `## 데이터베이스` 절 아래에 덧붙인다.
 
@@ -952,7 +952,7 @@ Authentication → Users에서 관리합니다. 비밀번호는 저장소나 문
 - 로그인은 공용 계정 하나로 하고 비밀번호는 Supabase 대시보드에서 관리한다. 비밀번호를 코드·문서·커밋에 적지 않는다. 화면에서만 막는 방식은 쓰지 않는다. 허용 계정은 `allowed_emails` 표로 관리하고 표시 이름은 `display_name`에 둔다.
 ```
 
-- [ ] **Step 8: 커밋**
+- [x] **Step 8: 커밋**
 
 ```bash
 git add js/store.js js/main.js index.html README.md CLAUDE.md
