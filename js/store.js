@@ -37,22 +37,36 @@ export async function signOut() {
 
 // ---- 읽기 ----
 
+const PATIENT_PAGE_SIZE = 500;
+const PATIENT_MAX = 5000;
+
+const PATIENT_SELECT = `
+  id, name, phone, condition, condition_label, created_at,
+  prescriptions (
+    id, prescribed_on, days, runout_on, status, closed_reason, created_at,
+    calls (
+      id, kind, due_on, status, no_answer_count, result, note, visit_needed, visit_booked,
+      escalation, escalated_at, done_at,
+      call_attempts ( id, attempted_at, outcome, note, staff_name )
+    )
+  )`;
+
+// 한 번에 요청하면 서버 기본 상한 때문에 1000명까지만 온다. 나눠 받아 합친다.
 export async function loadAll() {
-  const { data, error } = await supabase
-    .from('patients')
-    .select(`
-      id, name, phone, condition, condition_label, created_at,
-      prescriptions (
-        id, prescribed_on, days, runout_on, status, closed_reason, created_at,
-        calls (
-          id, kind, due_on, status, no_answer_count, result, note, visit_needed, visit_booked,
-          escalation, escalated_at, done_at,
-          call_attempts ( id, attempted_at, outcome, note, staff_name )
-        )
-      )`)
-    .order('created_at', { ascending: false });
-  check(error);
-  return data.map(toPatient);
+  const rows = [];
+  for (let from = 0; from < PATIENT_MAX; from += PATIENT_PAGE_SIZE) {
+    const { data, error } = await supabase
+      .from('patients')
+      .select(PATIENT_SELECT)
+      .order('created_at', { ascending: false })
+      .range(from, from + PATIENT_PAGE_SIZE - 1);
+    check(error);
+    rows.push(...data);
+    if (data.length < PATIENT_PAGE_SIZE) {
+      return { patients: rows.map(toPatient), truncated: false };
+    }
+  }
+  return { patients: rows.map(toPatient), truncated: true };
 }
 
 export async function loadScripts() {

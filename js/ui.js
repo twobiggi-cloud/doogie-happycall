@@ -60,12 +60,13 @@ export function findPatient(id) {
 
 export async function refresh() {
   try {
-    const [patients, scripts, staff] = await Promise.all([store.loadAll(), store.loadScripts(), store.loadMyStaff()]);
-    state.patients = patients;
+    const [all, scripts, staff] = await Promise.all([store.loadAll(), store.loadScripts(), store.loadMyStaff()]);
+    state.patients = all.patients;
     state.scripts = scripts;
     state.staff = staff;
     $('staff-name').textContent = staffLabel(staff) ? `${staffLabel(staff)} 님` : '';
     render();
+    if (all.truncated) toast('환자가 너무 많아 일부만 불러왔어요. 관리자에게 알려주세요.');
     if (state.detailPatientId) openDetailModal(findPatient(state.detailPatientId));
   } catch (err) {
     console.error(err);
