@@ -162,6 +162,16 @@ export async function updateCallDueOn(callId, { expectedDueOn, dueOn, reason }) 
   check(error);
 }
 
+// 연락이 안 된 처방에 다시 걸 콜을 만든다.
+export async function createRetryCall(prescriptionId, { dueOn, reason }) {
+  const { error } = await supabase.rpc('create_retry_call', {
+    p_prescription_id: prescriptionId,
+    p_due_on: dueOn,
+    p_reason: reason,
+  });
+  check(error);
+}
+
 export async function saveCallOutcome(callId, o) {
   const { error } = await supabase.rpc('save_call_outcome', {
     p_call_id: callId,
@@ -180,7 +190,9 @@ export async function saveCallOutcome(callId, o) {
 }
 
 // 다른 직원이 먼저 처리했을 때 나는 오류인지 구분한다.
-const CONFLICT_MESSAGES = ['콜 상태가 바뀌었습니다', '발송일이 이미 입력됐습니다', '처방이 이미 바뀌었습니다'];
+const CONFLICT_MESSAGES = [
+  '콜 상태가 바뀌었습니다', '발송일이 이미 입력됐습니다', '처방이 이미 바뀌었습니다', '재시도 콜이 이미 있습니다',
+];
 
 export function isConflictError(err) {
   return Boolean(err && typeof err.message === 'string'

@@ -108,3 +108,42 @@ export function awaitingShipment(patients, today) {
   }
   return rows.sort((a, b) => (a.prescription.prescribedOn < b.prescription.prescribedOn ? -1 : 1));
 }
+
+// 콜이 실제로 처리된 날. 부재로 마감된 콜은 예정일이 아니라 처리한 날로 본다.
+function handledOn(call) {
+  if (call.doneAt) return String(call.doneAt).slice(0, 10);
+  return call.dueOn ?? '';
+}
+
+// 연락이 닿지 않은 채 남은 콜. 나중에 통화가 되면 저절로 목록에서 빠진다.
+export function unreachedRows(patients, today, windowDays = 60) {
+  const since = addDays(today, -windowDays);
+  const rows = [];
+  for (const patient of patients) {
+    const calls = patient.prescriptions.flatMap((r) => r.calls.map((c) => ({ prescription: r, call: c })));
+    const lastAnswered = calls
+      .filter((v) => v.call.status === 'done')
+      .map((v) => handledOn(v.call))
+      .sort()
+      .pop() ?? '';
+    const mine = calls.filter(({ call }) => {
+      if (call.status !== 'sms_pending' && call.status !== 'closed_no_answer') return false;
+      const on = handledOn(call);
+      return on >= since && on > lastAnswered;
+    });
+    for (const { prescription, call } of mine) {
+      rows.push({
+        patient,
+        prescription,
+        call,
+        lastTriedOn: call.attempts[0] ? String(call.attempts[0].attemptedAt).slice(0, 10) : handledOn(call),
+        noAnswerCount: call.noAnswerCount,
+        smsSent: call.status === 'closed_no_answer',
+        hasRetryPending: prescription.calls.some((c) => c.kind === 'retry' && c.status === 'pending'),
+        count: mine.length,
+        needsVisitCheck: mine.length >= 2,
+      });
+    }
+  }
+  return rows.sort((a, b) => (a.lastTriedOn < b.lastTriedOn ? 1 : a.lastTriedOn > b.lastTriedOn ? -1 : 0));
+}

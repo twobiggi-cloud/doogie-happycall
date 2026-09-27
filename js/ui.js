@@ -1,14 +1,14 @@
 import * as store from './store.js';
 import {
   todayYMD, overdueDays, planCalls, hasPastCall, decideNoAnswer, decideSmsSent, decideAnswered,
-  defaultVisitNeededFor, isCallDay, replanPendingCalls, dueDateWarning,
+  defaultVisitNeededFor, isCallDay, replanPendingCalls, dueDateWarning, nextCallDayAfter,
 } from './schedule.js';
 import {
   monthKeyOf, shiftMonth, monthLabel, monthGrid, calendarDateOf, bucketByDate, undatedViews, countsOf, summarize,
 } from './calendar.js';
 import {
   todayCalls, upcomingCalls, escalationCalls, visitCalls, activePrescriptionCount, preRunoutCall, awaitingShipment,
-  callViews,
+  callViews, unreachedRows,
 } from './model.js';
 import {
   CONDITION_LABELS, RESULT_LABELS, KIND_LABELS, CALL_STATUS_LABELS, DAYS_PRESETS, DEFAULT_SCRIPTS,
@@ -17,7 +17,7 @@ import {
   RELATION_PRESETS, patientLabel, addressName,
 } from './texts.js';
 
-const TABS = ['escalation', 'today', 'shipment', 'calendar', 'visit', 'all', 'scripts'];
+const TABS = ['escalation', 'today', 'shipment', 'calendar', 'unreached', 'visit', 'all', 'scripts'];
 
 export const state = {
   patients: [], scripts: {}, tab: 'today', search: '', staff: null, detailPatientId: null,
@@ -134,6 +134,7 @@ export function render() {
   const todays = todayCalls(state.patients, today);
   const visits = visitCalls(state.patients);
   const shipments = awaitingShipment(state.patients, today);
+  const unreached = unreachedRows(state.patients, today);
 
   $('stat-escalation').textContent = escalations.length;
   $('stat-today').textContent = todays.length;
@@ -142,6 +143,7 @@ export function render() {
   $('tab-count-escalation').textContent = escalations.length;
   $('tab-count-today').textContent = todays.length;
   $('tab-count-shipment').textContent = shipments.length;
+  $('tab-count-unreached').textContent = unreached.length;
   $('tab-count-visit').textContent = visits.length;
   $('tab-count-all').textContent = state.patients.length;
 
@@ -152,6 +154,7 @@ export function render() {
   if (state.tab === 'today') renderToday(todays, today);
   if (state.tab === 'shipment') renderShipment(shipments, today);
   if (state.tab === 'calendar') renderCalendar(today);
+  if (state.tab === 'unreached') renderUnreached(unreached);
   if (state.tab === 'visit') renderVisit(visits);
   if (state.tab === 'all') renderAll();
   if (state.tab === 'scripts') renderScripts();
@@ -341,6 +344,41 @@ function renderCalendarDay(buckets, today) {
     ? '<div class="empty">이날은 잡힌 해피콜이 없어요.</div>'
     : list.map((v) => callCard(v, today)).join('');
   $('cal-day').innerHTML = head + body;
+}
+
+function renderUnreached(rows) {
+  if (rows.length === 0) {
+    $('panel-unreached').innerHTML = '<div class="empty">연락이 안 된 환자가 없어요.</div>';
+    return;
+  }
+  $('panel-unreached').innerHTML = rows.map(({ patient, prescription, call, lastTriedOn, noAnswerCount, smsSent, hasRetryPending, needsVisitCheck }) => {
+    const pills = [conditionBadge(patient), kindBadge(call)];
+    pills.push(`<span class="badge badge-other">부재 ${noAnswerCount}회</span>`);
+    pills.push(smsSent ? '<span class="badge badge-ended">문자 보냄</span>' : '<span class="badge badge-sms">문자 대기</span>');
+    if (needsVisitCheck) pills.push('<span class="badge badge-visit-check">다음 내원 시 확인</span>');
+    if (hasRetryPending) pills.push('<span class="badge badge-retry">재시도 콜 있음</span>');
+    const actions = [
+      hasRetryPending ? '' : `<button class="btn btn-primary btn-sm" data-action="retry" data-id="${prescription.id}">📞 재시도 콜 만들기</button>`,
+      call.status === 'sms_pending' ? `<button class="btn btn-sm" data-action="sms" data-id="${call.id}">✉️ 문자 문구 열기</button>` : '',
+      `<button class="btn btn-ghost btn-sm" data-action="detail" data-id="${patient.id}">상세 · 이력</button>`,
+    ].join('');
+    return `
+      <div class="case-card">
+        <div class="case-top">
+          <div class="case-id">
+            <div class="case-name">${esc(patientLabel(patient))}</div>
+            <div class="case-meta-row">${pills.join('')}</div>
+            <div class="case-phone mono">${esc(formatPhone(patient.phone))}</div>
+          </div>
+          <div class="case-due">
+            <div>마지막 시도</div>
+            <div class="d">${formatKoreanDate(lastTriedOn)}</div>
+            <div>소진 ${prescription.runoutOn ? formatKoreanDate(prescription.runoutOn) : '-'}</div>
+          </div>
+        </div>
+        <div class="case-actions">${actions}</div>
+      </div>`;
+  }).join('');
 }
 
 function renderVisit(list) {
@@ -993,6 +1031,50 @@ function openEditCallModal({ patient, prescription, call }) {
   });
 }
 
+function openRetryModal(patient, prescription) {
+  const today = todayYMD();
+  const first = isCallDay(today) ? today : nextCallDayAfter(today);
+  openModal(`
+    <div class="modal-head">
+      <div><h2>재시도 콜 · ${esc(patientLabel(patient))}</h2>
+        <div class="sub">${formatKoreanDate(prescription.prescribedOn)} 처방 · ${prescription.days}일분</div></div>
+      <button class="close-x" data-action="close">✕</button>
+    </div>
+    <div class="field">
+      <label>언제 걸까요?</label>
+      <input type="date" id="rt-date" value="${first}">
+    </div>
+    <div class="field">
+      <label>만드는 이유 *</label>
+      <input type="text" id="rt-reason" maxlength="200" placeholder="예: 원장님 지시로 다시 연락">
+    </div>
+    <div id="rt-preview"></div>
+    <div class="modal-footer">
+      <button class="btn" data-action="close">취소</button>
+      <button class="btn btn-primary" id="rt-submit">만들기</button>
+    </div>`);
+
+  const updatePreview = () => {
+    const date = $('rt-date').value;
+    if (!date) { $('rt-preview').innerHTML = '<div class="preview-box warn">날짜를 넣어주세요.</div>'; return; }
+    $('rt-preview').innerHTML = isCallDay(date)
+      ? `<div class="preview-box">${formatKoreanDate(date)}에 재시도 콜이 뜹니다.</div>`
+      : '<div class="preview-box warn">목요일과 일요일에는 콜을 잡지 않아요.</div>';
+  };
+
+  $('rt-date').addEventListener('input', updatePreview);
+  updatePreview();
+
+  $('rt-submit').addEventListener('click', async () => {
+    const date = $('rt-date').value;
+    const reason = $('rt-reason').value.trim();
+    if (!date || !isCallDay(date)) { toast('목요일과 일요일이 아닌 날짜를 골라주세요.'); return; }
+    if (!reason) { toast('만드는 이유를 적어주세요.'); return; }
+    const ok = await run(() => store.createRetryCall(prescription.id, { dueOn: date, reason }), '재시도 콜을 만들었어요.');
+    if (ok) closeModal();
+  });
+}
+
 function openSmsModal(view) {
   if (!view) return;
   const { patient, call } = view;
@@ -1070,6 +1152,12 @@ export function onAppClick(e) {
   if (action === 'cal-today') { state.month = monthKeyOf(todayYMD()); state.pickedDate = todayYMD(); render(); }
   if (action === 'cal-day') { state.pickedDate = state.pickedDate === id ? null : id; render(); }
   if (action === 'edit-call') openEditCallModal(findView(id));
+  if (action === 'retry') {
+    for (const patient of state.patients) {
+      const rx = patient.prescriptions.find((r) => r.id === id);
+      if (rx) { openRetryModal(patient, rx); break; }
+    }
+  }
   if (action === 'edit-rx') {
     for (const patient of state.patients) {
       const rx = patient.prescriptions.find((r) => r.id === id);

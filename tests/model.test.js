@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   toPatient, callViews, todayCalls, upcomingCalls, escalationCalls, visitCalls,
-  preRunoutCall, activePrescriptionCount, awaitingShipment,
+  preRunoutCall, activePrescriptionCount, awaitingShipment, unreachedRows,
 } from '../js/model.js';
 
 const row = {
@@ -108,4 +108,57 @@ test('관계가 없으면 본인으로 본다', () => {
   assert.equal(p.relation, 'self');
   const q = toPatient({ id: 'p2', name: '나환자', phone: '01011110001', condition: 'cough', condition_label: null, relation: 'child', prescriptions: [] });
   assert.equal(q.relation, 'child');
+});
+
+const rxWith = (id, calls) => ({
+  id, prescribedOn: '2026-08-20', shippedOn: '2026-08-20', days: 30, runoutOn: '2026-09-19',
+  status: 'closed', calls,
+});
+
+test('연락 안 됨은 마지막 통화 이후의 미연결만 모은다', () => {
+  const patients = [
+    {
+      id: 'p1', name: '가환자', phone: '01011110001', relation: 'self', condition: 'cough', conditionLabel: '',
+      prescriptions: [rxWith('r1', [
+        { id: 'c1', kind: 'pre_runout', status: 'closed_no_answer', dueOn: null, doneAt: '2026-09-10T01:00:00Z', noAnswerCount: 3, attempts: [] },
+        { id: 'c2', kind: 'retry', status: 'done', dueOn: '2026-09-15', doneAt: '2026-09-15T01:00:00Z', noAnswerCount: 0, attempts: [] },
+      ])],
+    },
+    {
+      id: 'p2', name: '나환자', phone: '01011110002', relation: 'self', condition: 'cough', conditionLabel: '',
+      prescriptions: [rxWith('r2', [
+        { id: 'c3', kind: 'pre_runout', status: 'sms_pending', dueOn: '2026-09-18', doneAt: null, noAnswerCount: 3, attempts: [{ attemptedAt: '2026-09-18T01:00:00Z', outcome: 'no_answer', note: '', staffName: '' }] },
+      ])],
+    },
+  ];
+  const rows = unreachedRows(patients, '2026-09-27');
+  assert.deepEqual(rows.map((r) => r.call.id), ['c3']);
+  assert.equal(rows[0].smsSent, false);
+  assert.equal(rows[0].noAnswerCount, 3);
+  assert.equal(rows[0].needsVisitCheck, false);
+});
+
+test('미연결이 두 건 이상이면 다음 내원 시 확인 표시', () => {
+  const patients = [{
+    id: 'p3', name: '다환자', phone: '01011110003', relation: 'self', condition: 'cough', conditionLabel: '',
+    prescriptions: [
+      rxWith('r3', [{ id: 'c4', kind: 'pre_runout', status: 'closed_no_answer', dueOn: null, doneAt: '2026-09-05T01:00:00Z', noAnswerCount: 3, attempts: [] }]),
+      rxWith('r4', [{ id: 'c5', kind: 'pre_runout', status: 'closed_no_answer', dueOn: null, doneAt: '2026-09-20T01:00:00Z', noAnswerCount: 3, attempts: [] }]),
+    ],
+  }];
+  const rows = unreachedRows(patients, '2026-09-27');
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0].call.id, 'c5');
+  assert.ok(rows.every((r) => r.needsVisitCheck));
+  assert.ok(rows.every((r) => r.smsSent));
+});
+
+test('60일보다 오래된 미연결은 빠진다', () => {
+  const patients = [{
+    id: 'p4', name: '라환자', phone: '01011110004', relation: 'self', condition: 'cough', conditionLabel: '',
+    prescriptions: [rxWith('r5', [
+      { id: 'c6', kind: 'pre_runout', status: 'closed_no_answer', dueOn: null, doneAt: '2026-06-01T01:00:00Z', noAnswerCount: 3, attempts: [] },
+    ])],
+  }];
+  assert.deepEqual(unreachedRows(patients, '2026-09-27'), []);
 });
