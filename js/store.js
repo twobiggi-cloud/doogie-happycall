@@ -94,19 +94,31 @@ export async function findPatientByPhone(phone) {
   return data ? { id: data.id, name: data.name, condition: data.condition, conditionLabel: data.condition_label ?? '' } : null;
 }
 
-export async function registerPrescription({ phone, name, condition, conditionLabel, prescribedOn, days, runoutOn, calls }) {
+export async function registerPrescription({ phone, name, condition, conditionLabel, prescribedOn, shippedOn, days, runoutOn, calls }) {
   const { data, error } = await supabase.rpc('register_prescription', {
     p_phone: phone,
     p_name: name,
     p_condition: condition,
     p_condition_label: conditionLabel ?? '',
     p_prescribed_on: prescribedOn,
+    p_shipped_on: shippedOn ?? null,
     p_days: days,
-    p_runout_on: runoutOn,
-    p_calls: calls,
+    p_runout_on: runoutOn ?? null,
+    p_calls: calls ?? [],
   });
   check(error);
   return data;
+}
+
+// 발송 대기 처방에 발송일을 넣고 그 자리에서 콜을 만든다.
+export async function setShippedOn(prescriptionId, { shippedOn, runoutOn, calls }) {
+  const { error } = await supabase.rpc('set_shipped_on', {
+    p_prescription_id: prescriptionId,
+    p_shipped_on: shippedOn,
+    p_runout_on: runoutOn,
+    p_calls: calls ?? [],
+  });
+  check(error);
 }
 
 export async function saveCallOutcome(callId, o) {
@@ -127,8 +139,11 @@ export async function saveCallOutcome(callId, o) {
 }
 
 // 다른 직원이 먼저 처리했을 때 나는 오류인지 구분한다.
+const CONFLICT_MESSAGES = ['콜 상태가 바뀌었습니다', '발송일이 이미 입력됐습니다'];
+
 export function isConflictError(err) {
-  return Boolean(err && typeof err.message === 'string' && err.message.includes('콜 상태가 바뀌었습니다'));
+  return Boolean(err && typeof err.message === 'string'
+    && CONFLICT_MESSAGES.some((m) => err.message.includes(m)));
 }
 
 export async function markEscalationSent(callId) {
