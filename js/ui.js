@@ -6,9 +6,10 @@ import {
 import {
   monthKeyOf, shiftMonth, monthLabel, monthGrid, calendarDateOf, bucketByDate, undatedViews, countsOf, summarize,
 } from './calendar.js';
+import { buildBackup, backupFileName } from './backup.js';
 import {
   todayCalls, upcomingCalls, escalationCalls, visitCalls, activePrescriptionCount, preRunoutCall, awaitingShipment,
-  callViews, unreachedRows,
+  callViews, unreachedRows, livePatients, trashRows,
 } from './model.js';
 import {
   CONDITION_LABELS, RESULT_LABELS, KIND_LABELS, CALL_STATUS_LABELS, DAYS_PRESETS, DEFAULT_SCRIPTS,
@@ -17,10 +18,10 @@ import {
   RELATION_PRESETS, patientLabel, addressName,
 } from './texts.js';
 
-const TABS = ['escalation', 'today', 'shipment', 'calendar', 'unreached', 'visit', 'all', 'scripts'];
+const TABS = ['escalation', 'today', 'shipment', 'calendar', 'unreached', 'visit', 'all', 'scripts', 'admin'];
 
 export const state = {
-  patients: [], scripts: {}, tab: 'today', search: '', staff: null, detailPatientId: null,
+  patients: [], allPatients: [], scripts: {}, tab: 'today', search: '', staff: null, detailPatientId: null,
   month: null, pickedDate: null, changes: [],
 };
 
@@ -71,7 +72,8 @@ export async function refresh() {
     const [all, scripts, staff, changes] = await Promise.all([
       store.loadAll(), store.loadScripts(), store.loadMyStaff(), store.loadChanges(),
     ]);
-    state.patients = all.patients;
+    state.allPatients = all.patients;
+    state.patients = livePatients(all.patients);
     state.scripts = scripts;
     state.staff = staff;
     state.changes = changes;
@@ -135,6 +137,7 @@ export function render() {
   const visits = visitCalls(state.patients);
   const shipments = awaitingShipment(state.patients, today);
   const unreached = unreachedRows(state.patients, today);
+  const trash = trashRows(state.allPatients);
 
   $('stat-escalation').textContent = escalations.length;
   $('stat-today').textContent = todays.length;
@@ -144,6 +147,7 @@ export function render() {
   $('tab-count-today').textContent = todays.length;
   $('tab-count-shipment').textContent = shipments.length;
   $('tab-count-unreached').textContent = unreached.length;
+  $('tab-count-admin').textContent = trash.length;
   $('tab-count-visit').textContent = visits.length;
   $('tab-count-all').textContent = state.patients.length;
 
@@ -158,6 +162,7 @@ export function render() {
   if (state.tab === 'visit') renderVisit(visits);
   if (state.tab === 'all') renderAll();
   if (state.tab === 'scripts') renderScripts();
+  if (state.tab === 'admin') renderAdmin(trash);
 }
 
 function callCard({ patient, prescription, call }, today) {
@@ -452,6 +457,49 @@ const SCRIPT_SECTIONS = [
   ['sms_no_answer', '부재 안내 문자 · {name} 자리에 환자 이름이 들어가요'],
 ];
 
+function renderAdmin(trash) {
+  const rows = trash.length === 0
+    ? '<div class="empty">휴지통이 비어 있어요.</div>'
+    : trash.map((row) => `
+      <div class="trash-row">
+        <div>
+          <div><strong>${esc(patientLabel(row.patient))}</strong> ${row.type === 'patient' ? '환자 전체' : `${formatKoreanDate(row.prescription.prescribedOn)} 처방`}</div>
+          <div class="when">${localDate(row.deletedAt)}에 지움</div>
+        </div>
+        <button class="btn btn-sm" data-action="restore-${row.type}" data-id="${row.type === 'patient' ? row.patient.id : row.prescription.id}">되돌리기</button>
+      </div>`).join('');
+
+  $('panel-admin').innerHTML = `
+    <div class="admin-box">
+      <h3>백업 내려받기</h3>
+      <p>지금까지의 환자·처방·콜·통화 기록과 스크립트를 파일 하나로 받습니다. 지운 것도 함께 들어갑니다.<br>
+      <strong>환자 정보가 담긴 파일입니다. 안전한 곳에 보관하고 아무에게나 보내지 마세요.</strong></p>
+      <button class="btn btn-primary btn-sm" data-action="backup">💾 백업 파일 받기</button>
+    </div>
+    <div class="admin-box">
+      <h3>휴지통</h3>
+      <p>지운 환자와 처방이 여기 남습니다. 되돌리면 화면에 다시 나타납니다. 영구 삭제는 아직 만들지 않았습니다.</p>
+      ${rows}
+    </div>`;
+}
+
+function downloadBackup() {
+  const generatedAt = new Date().toISOString();
+  const data = buildBackup({
+    patients: state.allPatients, scripts: state.scripts, changes: state.changes, generatedAt,
+  });
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = backupFileName(generatedAt);
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  toast(`백업 파일을 받았어요. 환자 ${data.counts.patients}명, 콜 ${data.counts.calls}건.`);
+}
+
 function renderScripts() {
   const scripts = scriptsWithDefaults();
   $('panel-scripts').innerHTML = SCRIPT_SECTIONS.map(([key, title]) => `
@@ -520,7 +568,10 @@ export function openDetailModal(patient) {
         </div>
         ${calls}
         ${logs ? `<div class="chg-list">${logs}</div>` : ''}
-        ${rx.status === 'active' ? `<div class="row-end"><button class="btn btn-sm" data-action="edit-rx" data-id="${rx.id}">🗓 일정 고치기</button></div>` : ''}
+        <div class="row-end">
+          ${rx.status === 'active' ? `<button class="btn btn-sm" data-action="edit-rx" data-id="${rx.id}">🗓 일정 고치기</button>` : ''}
+          <button class="btn btn-danger btn-sm" data-action="trash-rx" data-id="${rx.id}">🗑 처방 지우기</button>
+        </div>
       </div>`;
   }).join('');
 
@@ -530,7 +581,10 @@ export function openDetailModal(patient) {
       <button class="close-x" data-action="close">✕</button>
     </div>
     ${blocks || '<div class="empty">처방이 없어요.</div>'}
-    <div class="modal-footer"><button class="btn" data-action="close">닫기</button></div>`, true);
+    <div class="modal-footer">
+      <button class="btn btn-danger btn-sm" data-action="trash-patient" data-id="${patient.id}">🗑 환자 지우기</button>
+      <button class="btn" data-action="close">닫기</button>
+    </div>`, true);
   state.detailPatientId = patient.id;
 }
 
@@ -1075,6 +1129,33 @@ function openRetryModal(patient, prescription) {
   });
 }
 
+function openTrashModal(kind, id, title) {
+  openModal(`
+    <div class="modal-head">
+      <div><h2>${esc(title)}</h2>
+        <div class="sub">휴지통으로 보냅니다. 관리 탭에서 되돌릴 수 있어요.</div></div>
+      <button class="close-x" data-action="close">✕</button>
+    </div>
+    <div class="field">
+      <label>지우는 이유 *</label>
+      <input type="text" id="tr-reason" maxlength="200" placeholder="예: 전화번호를 잘못 넣어 다시 등록했어요">
+    </div>
+    <div class="modal-footer">
+      <button class="btn" data-action="close">취소</button>
+      <button class="btn btn-danger" id="tr-submit">휴지통으로</button>
+    </div>`);
+
+  $('tr-submit').addEventListener('click', async () => {
+    const reason = $('tr-reason').value.trim();
+    if (!reason) { toast('지우는 이유를 적어주세요.'); return; }
+    const action = kind === 'patient'
+      ? () => store.trashPatient(id, reason)
+      : () => store.trashPrescription(id, reason);
+    const ok = await run(action, '휴지통으로 보냈어요.');
+    if (ok) { state.detailPatientId = null; closeModal(); }
+  });
+}
+
 function openSmsModal(view) {
   if (!view) return;
   const { patient, call } = view;
@@ -1152,6 +1233,11 @@ export function onAppClick(e) {
   if (action === 'cal-today') { state.month = monthKeyOf(todayYMD()); state.pickedDate = todayYMD(); render(); }
   if (action === 'cal-day') { state.pickedDate = state.pickedDate === id ? null : id; render(); }
   if (action === 'edit-call') openEditCallModal(findView(id));
+  if (action === 'backup') downloadBackup();
+  if (action === 'restore-patient') run(() => store.restorePatient(id), '되돌렸어요.');
+  if (action === 'restore-prescription') run(() => store.restorePrescription(id), '되돌렸어요.');
+  if (action === 'trash-patient') openTrashModal('patient', id, '환자 지우기');
+  if (action === 'trash-rx') openTrashModal('prescription', id, '처방 지우기');
   if (action === 'retry') {
     for (const patient of state.patients) {
       const rx = patient.prescriptions.find((r) => r.id === id);
@@ -1185,6 +1271,7 @@ export function startApp() {
 
 export function stopApp() {
   state.patients = [];
+  state.allPatients = [];
   state.scripts = {};
   state.changes = [];
   state.staff = null;
