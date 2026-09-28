@@ -36,6 +36,7 @@ function toPrescription(r, patientId) {
     runoutOn: r.runout_on,
     status: r.status,
     closedReason: r.closed_reason,
+    deletedAt: r.deleted_at ?? null,
     calls: (r.calls ?? []).map((c) => toCall(c, r.id)),
   };
 }
@@ -46,6 +47,7 @@ export function toPatient(row) {
     name: row.name,
     phone: row.phone,
     relation: row.relation ?? 'self',
+    deletedAt: row.deleted_at ?? null,
     condition: row.condition,
     conditionLabel: row.condition_label ?? '',
     prescriptions: (row.prescriptions ?? []).map((r) => toPrescription(r, row.id)).sort(newestFirst('prescribedOn')),
@@ -146,4 +148,27 @@ export function unreachedRows(patients, today, windowDays = 60) {
     }
   }
   return rows.sort((a, b) => (a.lastTriedOn < b.lastTriedOn ? 1 : a.lastTriedOn > b.lastTriedOn ? -1 : 0));
+}
+
+// 화면은 지워지지 않은 것만 본다. 지운 것은 휴지통에서만 보인다.
+export function livePatients(patients) {
+  return patients
+    .filter((p) => !p.deletedAt)
+    .map((p) => ({ ...p, prescriptions: p.prescriptions.filter((r) => !r.deletedAt) }));
+}
+
+export function trashRows(patients) {
+  const rows = [];
+  for (const patient of patients) {
+    if (patient.deletedAt) {
+      rows.push({ type: 'patient', patient, prescription: null, deletedAt: patient.deletedAt });
+      continue;
+    }
+    for (const prescription of patient.prescriptions) {
+      if (prescription.deletedAt) {
+        rows.push({ type: 'prescription', patient, prescription, deletedAt: prescription.deletedAt });
+      }
+    }
+  }
+  return rows.sort((a, b) => (a.deletedAt < b.deletedAt ? 1 : -1));
 }

@@ -38,9 +38,9 @@ const PATIENT_PAGE_SIZE = 500;
 const PATIENT_MAX = 5000;
 
 const PATIENT_SELECT = `
-  id, name, phone, relation, condition, condition_label, created_at,
+  id, name, phone, relation, condition, condition_label, created_at, deleted_at,
   prescriptions (
-    id, prescribed_on, shipped_on, days, runout_on, status, closed_reason, created_at,
+    id, prescribed_on, shipped_on, days, runout_on, status, closed_reason, created_at, deleted_at,
     calls (
       id, kind, due_on, status, no_answer_count, result, note, visit_needed, visit_booked,
       escalation, escalated_at, done_at,
@@ -172,6 +172,27 @@ export async function createRetryCall(prescriptionId, { dueOn, reason }) {
   check(error);
 }
 
+// 지우기는 행을 없애지 않는다. 지운 시각만 적고 화면에서 숨긴다.
+export async function trashPatient(patientId, reason) {
+  const { error } = await supabase.rpc('trash_patient', { p_patient_id: patientId, p_reason: reason });
+  check(error);
+}
+
+export async function restorePatient(patientId) {
+  const { error } = await supabase.rpc('restore_patient', { p_patient_id: patientId });
+  check(error);
+}
+
+export async function trashPrescription(prescriptionId, reason) {
+  const { error } = await supabase.rpc('trash_prescription', { p_prescription_id: prescriptionId, p_reason: reason });
+  check(error);
+}
+
+export async function restorePrescription(prescriptionId) {
+  const { error } = await supabase.rpc('restore_prescription', { p_prescription_id: prescriptionId });
+  check(error);
+}
+
 export async function saveCallOutcome(callId, o) {
   const { error } = await supabase.rpc('save_call_outcome', {
     p_call_id: callId,
@@ -192,6 +213,7 @@ export async function saveCallOutcome(callId, o) {
 // 다른 직원이 먼저 처리했을 때 나는 오류인지 구분한다.
 const CONFLICT_MESSAGES = [
   '콜 상태가 바뀌었습니다', '발송일이 이미 입력됐습니다', '처방이 이미 바뀌었습니다', '재시도 콜이 이미 있습니다',
+  '이미 처리됐습니다',
 ];
 
 export function isConflictError(err) {

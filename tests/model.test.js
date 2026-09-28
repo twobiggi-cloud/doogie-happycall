@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   toPatient, callViews, todayCalls, upcomingCalls, escalationCalls, visitCalls,
-  preRunoutCall, activePrescriptionCount, awaitingShipment, unreachedRows,
+  preRunoutCall, activePrescriptionCount, awaitingShipment, unreachedRows, livePatients, trashRows,
 } from '../js/model.js';
 
 const row = {
@@ -161,4 +161,28 @@ test('60일보다 오래된 미연결은 빠진다', () => {
     ])],
   }];
   assert.deepEqual(unreachedRows(patients, '2026-09-27'), []);
+});
+
+const trashFixture = () => ([{
+  id: 'p1', name: '산환자', phone: '01011110001', relation: 'self', condition: 'cough', conditionLabel: '', deletedAt: null,
+  prescriptions: [
+    { id: 'r1', prescribedOn: '2026-09-01', shippedOn: '2026-09-01', days: 7, runoutOn: '2026-09-08', status: 'active', deletedAt: null, calls: [] },
+    { id: 'r2', prescribedOn: '2026-09-02', shippedOn: '2026-09-02', days: 7, runoutOn: '2026-09-09', status: 'active', deletedAt: '2026-09-20T01:00:00Z', calls: [] },
+  ],
+}, {
+  id: 'p2', name: '지운환자', phone: '01011110002', relation: 'self', condition: 'cough', conditionLabel: '', deletedAt: '2026-09-25T01:00:00Z',
+  prescriptions: [{ id: 'r3', prescribedOn: '2026-09-03', shippedOn: '2026-09-03', days: 7, runoutOn: '2026-09-10', status: 'active', deletedAt: null, calls: [] }],
+}]);
+
+test('화면에는 지워지지 않은 환자와 처방만 보인다', () => {
+  const live = livePatients(trashFixture());
+  assert.deepEqual(live.map((p) => p.id), ['p1']);
+  assert.deepEqual(live[0].prescriptions.map((r) => r.id), ['r1']);
+});
+
+test('휴지통에는 지운 환자와 지운 처방이 최근 순으로', () => {
+  const rows = trashRows(trashFixture());
+  assert.deepEqual(rows.map((r) => r.type), ['patient', 'prescription']);
+  assert.equal(rows[0].patient.id, 'p2');
+  assert.equal(rows[1].prescription.id, 'r2');
 });
