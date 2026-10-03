@@ -4,7 +4,7 @@ export const CONDITION_LABELS = { urticaria: '두드러기', cough: '기침', ot
 export const RESULT_LABELS = { improved: '호전', same: '유지', worse: '악화', unknown: '판단보류' };
 export const KIND_LABELS = { mid: '중간 콜', pre_runout: '소진 전 콜', retry: '재시도 콜' };
 export const CALL_STATUS_LABELS = { pending: '대기', done: '완료', sms_pending: '문자 대기', closed_no_answer: '부재 마감' };
-export const DAYS_PRESETS = [30, 15, 10, 7];
+export const DAYS_PRESETS = [10, 15, 20, 30];
 
 export const RELATION_LABELS = {
   self: '본인', mother: '모', father: '부', grandmother: '조모', grandfather: '조부', child: '자녀', other: '기타',
