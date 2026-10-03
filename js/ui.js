@@ -2,6 +2,7 @@ import * as store from './store.js';
 import {
   todayYMD, overdueDays, planCalls, hasPastCall, decideNoAnswer, decideSmsSent, decideAnswered,
   defaultVisitNeededFor, isCallDay, replanPendingCalls, dueDateWarning, nextCallDayAfter,
+  addDays, daysBetween,
 } from './schedule.js';
 import {
   monthKeyOf, shiftMonth, monthLabel, monthGrid, calendarDateOf, bucketByDate, undatedViews, countsOf, summarize,
@@ -610,7 +611,10 @@ function selectPill(groupId, value) {
 
 export function openRegisterModal() {
   const today = todayYMD();
-  const form = { condition: 'urticaria', existing: null, relation: 'self', family: [], lookup: 0 };
+  const form = {
+    condition: 'urticaria', existing: null, relation: 'self', family: [], lookup: 0,
+    plan: null, due: {},
+  };
 
   openModal(`
     <div class="modal-head">
@@ -637,7 +641,11 @@ export function openRegisterModal() {
     </div>
     <div class="field" id="rg-other-field" hidden><label>기타 증상 이름</label><input type="text" id="rg-other" placeholder="예: 아토피"></div>
     <div class="field-row">
-      <div class="field"><label>처방일</label><input type="date" id="rg-date" value="${today}"></div>
+      <div class="field">
+        <label>처방일</label>
+        <input type="date" id="rg-date" value="${addDays(today, -1)}">
+        <span class="field-hint">어제 진료 기준으로 넣어 뒀어요.</span>
+      </div>
       <div class="field">
         <label>처방 일수 *</label>
         ${pillGroup('rg-days-presets', DAYS_PRESETS.map((d) => [d, `${d}일`]), 30)}
@@ -650,7 +658,12 @@ export function openRegisterModal() {
       <label class="checkbox-row"><input type="checkbox" id="rg-ship-unknown"> 아직 모름 (발송 대기로 두기)</label>
       <span class="field-hint">콜 날짜는 발송일부터 셉니다.</span>
     </div>
-    <div id="rg-preview"></div>
+    <div class="field">
+      <label>중간 콜</label>
+      <label class="checkbox-row"><input type="checkbox" id="rg-mid"> 중간 콜 하시겠습니까? (복용 중간에 한 번 더 전화)</label>
+      <span class="field-hint">체크하면 발송일과 소진일 사이 절반 날짜에 전화가 한 건 더 잡혀요.</span>
+    </div>
+    <div id="rg-plan"></div>
     <div class="modal-footer">
       <button class="btn" data-action="close">취소</button>
       <button class="btn btn-primary" id="rg-submit">등록</button>
@@ -699,32 +712,66 @@ export function openRegisterModal() {
     renderFamily();
   };
 
-  const readPlan = () => {
+  const readBase = () => {
     const days = Number($('rg-days').value);
     const date = $('rg-date').value;
     if (!date || !isValidDays(days)) return null;
-    if ($('rg-ship-unknown').checked) return { date, days, shippedOn: null, plan: null };
+    if ($('rg-ship-unknown').checked) return { date, days, shippedOn: null };
     const shippedOn = $('rg-ship').value;
     if (!shippedOn) return null;
-    return { date, days, shippedOn, plan: planCalls(shippedOn, days) };
+    return { date, days, shippedOn };
   };
 
-  const updatePreview = () => {
-    const read = readPlan();
+  // 화면에서 고친 날짜를 그대로 쓴다. 저장도 이 날짜로 간다.
+  const callsFromForm = () => (form.plan ? form.plan.calls.map((c) => ({ kind: c.kind, dueOn: form.due[c.kind] })) : []);
+
+  // 날짜를 고칠 때는 경고만 다시 쓴다. 입력칸을 다시 그리지 않아 커서가 튀지 않는다.
+  const updateWarnings = () => {
+    if (!form.plan) return;
+    const runout = form.plan.runoutOn;
+    document.querySelectorAll('#rg-plan .rg-due').forEach((input) => {
+      const kind = input.dataset.kind;
+      form.due[kind] = input.value;
+      const hint = document.querySelector(`#rg-plan [data-hint="${kind}"]`);
+      if (!input.value) {
+        hint.textContent = '날짜를 넣어주세요.';
+        hint.classList.add('warn');
+        return;
+      }
+      const warning = dueDateWarning(input.value, runout);
+      hint.textContent = warning ?? `${formatKoreanDate(input.value)} · 소진 ${daysBetween(input.value, runout)}일 전`;
+      hint.classList.toggle('warn', Boolean(warning));
+    });
+    $('rg-warn').innerHTML = hasPastCall(callsFromForm(), today)
+      ? '<div class="preview-box warn">이미 지난 콜 날짜가 있어요. 저장하면 바로 지연으로 떠요.</div>'
+      : '';
+  };
+
+  const renderPlan = () => {
+    const read = readBase();
+    form.plan = null;
+    form.due = {};
     if (!read) {
-      $('rg-preview').innerHTML = '<div class="preview-box warn">처방일과 발송일을 넣고, 처방 일수는 1~90일로 넣어주세요.</div>';
+      $('rg-plan').innerHTML = '<div class="preview-box warn">처방일과 발송일을 넣고, 처방 일수는 1~90일로 넣어주세요.</div>';
       return;
     }
-    if (!read.plan) {
-      $('rg-preview').innerHTML = '<div class="preview-box warn">발송 대기로 저장돼요. 발송일을 넣는 날 콜이 잡혀요.</div>';
+    if (!read.shippedOn) {
+      $('rg-plan').innerHTML = '<div class="preview-box warn">발송 대기로 저장돼요. 발송일을 넣는 날 콜이 잡혀요.</div>';
       return;
     }
-    const lines = read.plan.calls.map((c) => `${KIND_LABELS[c.kind]} ${formatKoreanDate(c.dueOn)}`).join(', ');
-    let html = `<div class="preview-box">소진일 ${formatKoreanDate(read.plan.runoutOn)} · ${lines}</div>`;
-    if (hasPastCall(read.plan.calls, today)) {
-      html += '<div class="preview-box warn">이미 지난 콜 날짜가 있어요. 저장하면 바로 지연으로 떠요.</div>';
-    }
-    $('rg-preview').innerHTML = html;
+    const plan = planCalls(read.shippedOn, read.days, { withMid: $('rg-mid').checked });
+    form.plan = plan;
+    plan.calls.forEach((c) => { form.due[c.kind] = c.dueOn; });
+    $('rg-plan').innerHTML = `
+      <div class="preview-box">소진일 ${formatKoreanDate(plan.runoutOn)} · 전화 ${plan.calls.length}건을 아래 날짜로 잡아요. 환자 사정이 있으면 지금 고치고 등록하세요.</div>
+      ${plan.calls.map((c) => `
+        <div class="field">
+          <label>${KIND_LABELS[c.kind]} 날짜</label>
+          <input type="date" class="rg-due" data-kind="${c.kind}" value="${c.dueOn}">
+          <span class="field-hint" data-hint="${c.kind}"></span>
+        </div>`).join('')}
+      <div id="rg-warn"></div>`;
+    updateWarnings();
   };
 
   $('rg-phone').addEventListener('input', async () => {
@@ -774,25 +821,36 @@ export function openRegisterModal() {
     if (!b) return;
     $('rg-days').value = b.dataset.val;
     selectPill('rg-days-presets', b.dataset.val);
-    updatePreview();
+    renderPlan();
   });
 
-  $('rg-days').addEventListener('input', () => { selectPill('rg-days-presets', $('rg-days').value); updatePreview(); });
-  $('rg-date').addEventListener('input', updatePreview);
-  $('rg-ship').addEventListener('input', updatePreview);
+  $('rg-days').addEventListener('input', () => { selectPill('rg-days-presets', $('rg-days').value); renderPlan(); });
+  // 처방일은 콜 날짜를 바꾸지 않으므로, 고쳐 둔 날짜를 지우지 않는다.
+  $('rg-date').addEventListener('input', () => { if (!form.plan || !$('rg-date').value) renderPlan(); });
+  $('rg-ship').addEventListener('input', renderPlan);
   $('rg-ship-unknown').addEventListener('change', () => {
     $('rg-ship').disabled = $('rg-ship-unknown').checked;
-    updatePreview();
+    renderPlan();
   });
-  updatePreview();
+  $('rg-mid').addEventListener('change', renderPlan);
+  $('rg-plan').addEventListener('input', (e) => {
+    if (e.target.classList.contains('rg-due')) updateWarnings();
+  });
+  renderPlan();
 
   $('rg-submit').addEventListener('click', async () => {
     const phone = normalizePhone($('rg-phone').value);
     const name = $('rg-name').value.trim();
-    const read = readPlan();
+    const read = readBase();
     if (!isValidPhone(phone)) { toast('전화번호는 숫자 10~11자리로 넣어주세요.'); return; }
     if (!form.existing && !name) { toast('환자명을 넣어주세요.'); return; }
     if (!read) { toast('처방일·발송일과 처방 일수(1~90일)를 확인해주세요.'); return; }
+    const calls = callsFromForm();
+    if (read.shippedOn) {
+      if (calls.length === 0 || calls.some((c) => !c.dueOn)) { toast('전화 날짜를 모두 넣어주세요.'); return; }
+      const bad = calls.map((c) => dueDateWarning(c.dueOn, form.plan.runoutOn)).find(Boolean);
+      if (bad) { toast(bad); return; }
+    }
     const ok = await run(() => store.registerPrescription({
       phone,
       name: form.existing ? form.existing.name : name,
@@ -802,9 +860,9 @@ export function openRegisterModal() {
       prescribedOn: read.date,
       shippedOn: read.shippedOn,
       days: read.days,
-      runoutOn: read.plan ? read.plan.runoutOn : null,
-      calls: read.plan ? read.plan.calls : [],
-    }), read.plan
+      runoutOn: read.shippedOn ? form.plan.runoutOn : null,
+      calls: read.shippedOn ? calls : [],
+    }), read.shippedOn
       ? (form.existing ? '기존 환자에 처방을 추가했어요.' : '등록했어요.')
       : '발송 대기로 저장했어요. 발송일을 넣으면 콜이 잡혀요.');
     if (ok) closeModal();
@@ -909,6 +967,10 @@ export function openShipModal(row) {
       <input type="date" id="sp-date" value="${today}">
       <span class="field-hint">이 날짜부터 콜 날짜를 셉니다.</span>
     </div>
+    <div class="field">
+      <label>중간 콜</label>
+      <label class="checkbox-row"><input type="checkbox" id="sp-mid"> 중간 콜 하시겠습니까?</label>
+    </div>
     <div id="sp-preview"></div>
     <div class="modal-footer">
       <button class="btn" data-action="close">취소</button>
@@ -918,7 +980,7 @@ export function openShipModal(row) {
   const readShip = () => {
     const shippedOn = $('sp-date').value;
     if (!shippedOn) return null;
-    return { shippedOn, plan: planCalls(shippedOn, prescription.days) };
+    return { shippedOn, plan: planCalls(shippedOn, prescription.days, { withMid: $('sp-mid').checked }) };
   };
 
   const updatePreview = () => {
@@ -936,6 +998,7 @@ export function openShipModal(row) {
   };
 
   $('sp-date').addEventListener('input', updatePreview);
+  $('sp-mid').addEventListener('change', updatePreview);
   updatePreview();
 
   $('sp-submit').addEventListener('click', async () => {
@@ -969,6 +1032,11 @@ function openEditRxModal(patient, rx) {
       <input type="number" id="er-days" min="1" max="90" value="${rx.days}">
     </div>
     <div class="field">
+      <label>중간 콜</label>
+      <label class="checkbox-row"><input type="checkbox" id="er-mid"${rx.calls.some((c) => c.kind === 'mid') ? ' checked' : ''}> 중간 콜 하시겠습니까?</label>
+      <span class="field-hint">끄면 대기 중인 중간 콜이 사라져요. 이미 끝난 중간 콜은 그대로 남아요.</span>
+    </div>
+    <div class="field">
       <label>바꾸는 이유 *</label>
       <input type="text" id="er-reason" maxlength="200" placeholder="예: 약이 이틀 늦게 나갔어요">
     </div>
@@ -984,7 +1052,7 @@ function openEditRxModal(patient, rx) {
     if ($('er-wait').checked) return { days, shippedOn: null, plan: null };
     const shippedOn = $('er-ship').value;
     if (!shippedOn) return null;
-    return { days, shippedOn, plan: replanPendingCalls(rx.calls, shippedOn, days) };
+    return { days, shippedOn, plan: replanPendingCalls(rx.calls, shippedOn, days, { withMid: $('er-mid').checked }) };
   };
 
   const updatePreview = () => {
@@ -1010,6 +1078,7 @@ function openEditRxModal(patient, rx) {
   };
 
   $('er-ship').addEventListener('input', updatePreview);
+  $('er-mid').addEventListener('change', updatePreview);
   $('er-days').addEventListener('input', () => { selectPill('er-days-presets', $('er-days').value); updatePreview(); });
   $('er-days-presets').addEventListener('click', (e) => {
     const b = e.target.closest('.pill-opt');
@@ -1076,7 +1145,7 @@ function openEditCallModal({ patient, prescription, call }) {
     const date = $('ec-date').value;
     const reason = $('ec-reason').value.trim();
     if (!date) { toast('날짜를 넣어주세요.'); return; }
-    if (!isCallDay(date)) { toast('목요일과 일요일에는 콜을 잡지 않아요.'); return; }
+    if (!isCallDay(date)) { toast('목·토·일에는 콜을 잡지 않아요.'); return; }
     if (!reason) { toast('바꾸는 이유를 적어주세요.'); return; }
     const ok = await run(() => store.updateCallDueOn(call.id, {
       expectedDueOn: call.dueOn, dueOn: date, reason,
@@ -1113,7 +1182,7 @@ function openRetryModal(patient, prescription) {
     if (!date) { $('rt-preview').innerHTML = '<div class="preview-box warn">날짜를 넣어주세요.</div>'; return; }
     $('rt-preview').innerHTML = isCallDay(date)
       ? `<div class="preview-box">${formatKoreanDate(date)}에 재시도 콜이 뜹니다.</div>`
-      : '<div class="preview-box warn">목요일과 일요일에는 콜을 잡지 않아요.</div>';
+      : '<div class="preview-box warn">목·토·일에는 콜을 잡지 않아요.</div>';
   };
 
   $('rt-date').addEventListener('input', updatePreview);
@@ -1122,7 +1191,7 @@ function openRetryModal(patient, prescription) {
   $('rt-submit').addEventListener('click', async () => {
     const date = $('rt-date').value;
     const reason = $('rt-reason').value.trim();
-    if (!date || !isCallDay(date)) { toast('목요일과 일요일이 아닌 날짜를 골라주세요.'); return; }
+    if (!date || !isCallDay(date)) { toast('월·화·수·금 중에서 골라주세요.'); return; }
     if (!reason) { toast('만드는 이유를 적어주세요.'); return; }
     const ok = await run(() => store.createRetryCall(prescription.id, { dueOn: date, reason }), '재시도 콜을 만들었어요.');
     if (ok) closeModal();
