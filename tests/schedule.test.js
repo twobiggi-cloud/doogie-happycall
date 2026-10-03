@@ -22,21 +22,23 @@ test('isoDay는 월=1, 목=4, 일=7', () => {
   assert.equal(isoDay('2026-09-20'), 7);
 });
 
-test('목요일과 일요일은 콜 요일이 아니다', () => {
-  assert.equal(isCallDay('2026-09-17'), false);
-  assert.equal(isCallDay('2026-09-20'), false);
-  assert.equal(isCallDay('2026-09-18'), true);
+test('목·토·일은 콜 요일이 아니다', () => {
+  assert.equal(isCallDay('2026-09-17'), false); // 목
+  assert.equal(isCallDay('2026-09-19'), false); // 토
+  assert.equal(isCallDay('2026-09-20'), false); // 일
+  assert.equal(isCallDay('2026-09-18'), true);  // 금
 });
 
 test('콜 없는 요일은 앞날로 당긴다', () => {
-  assert.equal(pullBackToCallDay('2026-09-17'), '2026-09-16');
-  assert.equal(pullBackToCallDay('2026-09-20'), '2026-09-19');
+  assert.equal(pullBackToCallDay('2026-09-17'), '2026-09-16'); // 목 → 수
+  assert.equal(pullBackToCallDay('2026-09-19'), '2026-09-18'); // 토 → 금
+  assert.equal(pullBackToCallDay('2026-09-20'), '2026-09-18'); // 일 → 금
   assert.equal(pullBackToCallDay('2026-09-18'), '2026-09-18');
 });
 
-test('다음 콜 요일은 목·일을 건너뛴다', () => {
-  assert.equal(nextCallDayAfter('2026-09-16'), '2026-09-18');
-  assert.equal(nextCallDayAfter('2026-09-19'), '2026-09-21');
+test('다음 콜 요일은 목·토·일을 건너뛴다', () => {
+  assert.equal(nextCallDayAfter('2026-09-16'), '2026-09-18'); // 수 → 금
+  assert.equal(nextCallDayAfter('2026-09-18'), '2026-09-21'); // 금 → 월
   assert.equal(nextCallDayAfter('2026-09-14'), '2026-09-15');
 });
 
@@ -48,8 +50,8 @@ test('소진일은 처방일 + 처방 일수', () => {
   assert.equal(runoutOn('2026-09-15', 30), '2026-10-15');
 });
 
-test('30일 처방은 중간 콜과 소진 전 콜 두 건', () => {
-  assert.deepEqual(planCalls('2026-09-15', 30), {
+test('중간 콜을 켜면 30일 처방은 두 건', () => {
+  assert.deepEqual(planCalls('2026-09-15', 30, { withMid: true }), {
     runoutOn: '2026-10-15',
     calls: [
       { kind: 'mid', dueOn: '2026-09-30' },
@@ -58,17 +60,24 @@ test('30일 처방은 중간 콜과 소진 전 콜 두 건', () => {
   });
 });
 
-test('15일 처방은 중간 콜 없이 한 건, 일요일이면 토요일로', () => {
+test('중간 콜은 켜지 않으면 일수와 상관없이 생기지 않는다', () => {
+  assert.deepEqual(planCalls('2026-09-15', 30).calls, [{ kind: 'pre_runout', dueOn: '2026-10-12' }]);
+  assert.deepEqual(planCalls('2026-09-15', 30, { withMid: false }).calls, [{ kind: 'pre_runout', dueOn: '2026-10-12' }]);
+});
+
+test('소진 전 콜이 일요일이면 금요일로 당겨진다', () => {
+  // 소진 09-30 → 3일 전 09-27(일) → 토요일도 쉬므로 09-25(금)
   assert.deepEqual(planCalls('2026-09-15', 15), {
     runoutOn: '2026-09-30',
-    calls: [{ kind: 'pre_runout', dueOn: '2026-09-26' }],
+    calls: [{ kind: 'pre_runout', dueOn: '2026-09-25' }],
   });
 });
 
-test('16일 처방부터 중간 콜이 생긴다', () => {
-  assert.deepEqual(planCalls('2026-09-15', 16).calls, [
-    { kind: 'mid', dueOn: '2026-09-23' },
-    { kind: 'pre_runout', dueOn: '2026-09-28' },
+test('중간 콜을 켜면 짧은 처방에도 절반 날짜로 잡힌다', () => {
+  // 발송 09-15(화) 10일분 → 절반 09-20(일) → 09-18(금), 소진 09-25 → 3일 전 09-22(화)
+  assert.deepEqual(planCalls('2026-09-15', 10, { withMid: true }).calls, [
+    { kind: 'mid', dueOn: '2026-09-18' },
+    { kind: 'pre_runout', dueOn: '2026-09-22' },
   ]);
 });
 
@@ -197,11 +206,11 @@ test('7일 이하 처방은 소진 1일 전, 8일 이상은 소진 3일 전', ()
   assert.equal(preRunoutOffsetFor(30), 3);
 });
 
-test('7일분은 발송 엿새째에 걸고, 목·일이면 당긴다', () => {
-  // 2026-10-05(월) 발송 → 소진 10-12(월) → 1일 전 10-11(일) → 토요일로 당김
+test('7일분은 소진 1일 전에 걸고, 쉬는 요일이면 당긴다', () => {
+  // 2026-10-05(월) 발송 → 소진 10-12(월) → 1일 전 10-11(일) → 금요일 10-09로 당김
   const plan = planCalls('2026-10-05', 7);
   assert.equal(plan.runoutOn, '2026-10-12');
-  assert.deepEqual(plan.calls, [{ kind: 'pre_runout', dueOn: '2026-10-10' }]);
+  assert.deepEqual(plan.calls, [{ kind: 'pre_runout', dueOn: '2026-10-09' }]);
 });
 
 test('10일분은 소진 3일 전 그대로, 중간 콜은 없다', () => {
@@ -211,12 +220,12 @@ test('10일분은 소진 3일 전 그대로, 중간 콜은 없다', () => {
 });
 
 test('30일분은 발송일 기준으로 중간 콜과 소진 전 콜을 잡는다', () => {
-  // 발송 10-05(월) → 소진 11-04(수), 중간 10-20(화), 소진 전 11-01(일) → 10-31(토)
-  const plan = planCalls('2026-10-05', 30);
+  // 발송 10-05(월) → 소진 11-04(수), 중간 10-20(화), 소진 전 11-01(일) → 10-30(금)
+  const plan = planCalls('2026-10-05', 30, { withMid: true });
   assert.equal(plan.runoutOn, '2026-11-04');
   assert.deepEqual(plan.calls, [
     { kind: 'mid', dueOn: '2026-10-20' },
-    { kind: 'pre_runout', dueOn: '2026-10-31' },
+    { kind: 'pre_runout', dueOn: '2026-10-30' },
   ]);
 });
 
@@ -239,26 +248,39 @@ test('끝난 콜은 다시 잡지 않고 대기 콜만 다시 계산한다', () 
   ];
   const out = replanPendingCalls(existing, '2026-10-05', 30);
   assert.equal(out.runoutOn, '2026-11-04');
-  assert.deepEqual(out.calls, [{ kind: 'pre_runout', dueOn: '2026-10-31' }]);
+  assert.deepEqual(out.calls, [{ kind: 'pre_runout', dueOn: '2026-10-30' }]);
 });
 
 test('끝난 콜이 없으면 처음부터 다시 잡는다', () => {
   const out = replanPendingCalls([{ kind: 'pre_runout', status: 'pending', dueOn: '2026-10-19' }], '2026-10-05', 7);
   assert.equal(out.runoutOn, '2026-10-12');
-  assert.deepEqual(out.calls, [{ kind: 'pre_runout', dueOn: '2026-10-10' }]);
+  assert.deepEqual(out.calls, [{ kind: 'pre_runout', dueOn: '2026-10-09' }]);
 });
 
-test('투약일수를 줄이면 대기 중인 중간 콜은 사라진다', () => {
+test('중간 콜이 있던 처방은 일정을 다시 잡아도 중간 콜을 지킨다', () => {
   const existing = [
     { kind: 'mid', status: 'pending', dueOn: '2026-10-20' },
-    { kind: 'pre_runout', status: 'pending', dueOn: '2026-10-31' },
+    { kind: 'pre_runout', status: 'pending', dueOn: '2026-10-30' },
   ];
   const out = replanPendingCalls(existing, '2026-10-05', 10);
+  assert.deepEqual(out.calls, [
+    { kind: 'mid', dueOn: '2026-10-09' },
+    { kind: 'pre_runout', dueOn: '2026-10-12' },
+  ]);
+});
+
+test('중간 콜을 끄면 대기 중인 중간 콜은 계획에서 빠진다', () => {
+  const existing = [
+    { kind: 'mid', status: 'pending', dueOn: '2026-10-20' },
+    { kind: 'pre_runout', status: 'pending', dueOn: '2026-10-30' },
+  ];
+  const out = replanPendingCalls(existing, '2026-10-05', 30, { withMid: false });
   assert.deepEqual(out.calls.map((c) => c.kind), ['pre_runout']);
 });
 
 test('날짜 경고는 쉬는 요일과 소진일 이후', () => {
-  assert.equal(dueDateWarning('2026-10-11', '2026-10-20'), '목요일과 일요일에는 콜을 잡지 않아요.');
+  assert.equal(dueDateWarning('2026-10-11', '2026-10-20'), '목·토·일에는 콜을 잡지 않아요.');
+  assert.equal(dueDateWarning('2026-10-10', '2026-10-20'), '목·토·일에는 콜을 잡지 않아요.');
   assert.equal(dueDateWarning('2026-10-21', '2026-10-20'), '소진일보다 늦은 날짜예요.');
   assert.equal(dueDateWarning('2026-10-20', '2026-10-20'), null);
   assert.equal(dueDateWarning('2026-10-20', null), null);

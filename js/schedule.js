@@ -1,13 +1,12 @@
 // 두기 해피콜 일정 규칙. 날짜는 모두 'YYYY-MM-DD' 문자열로 다룬다.
 // 브라우저 API를 쓰지 않아서 Node 테스트로 그대로 검증한다.
 
-export const MID_CALL_SKIP_MAX_DAYS = 15; // 투약 일수가 이 값 이하면 중간 콜 없음
 export const PRE_RUNOUT_OFFSET_DAYS = 3;  // 소진 3일 전
 export const SHORT_RX_MAX_DAYS = 7;       // 이 일수 이하는 짧은 처방으로 본다
 export const SHORT_PRE_RUNOUT_OFFSET_DAYS = 1; // 짧은 처방은 소진 1일 전
 export const SHIPMENT_WAIT_LIMIT_DAYS = 5; // 처방 후 이 날수가 지나면 발송일 확인 대상
 export const MAX_NO_ANSWER = 3;           // 부재 3회째에 마감
-export const NO_CALL_ISO_DAYS = [4, 7];   // 목요일, 일요일
+export const NO_CALL_ISO_DAYS = [4, 6, 7]; // 목요일, 토요일, 일요일 (콜은 월·화·수·금에만)
 
 const DAY_MS = 86400000;
 
@@ -69,10 +68,11 @@ function notBeforeShipment(dueOn, shippedOn) {
   return isCallDay(shippedOn) ? shippedOn : nextCallDayAfter(shippedOn);
 }
 
-export function planCalls(shippedOn, days) {
+// 중간 콜은 접수실에서 넣기로 한 처방에만 붙인다(options.withMid).
+export function planCalls(shippedOn, days, options = {}) {
   const runout = runoutOn(shippedOn, days);
   const calls = [];
-  if (days > MID_CALL_SKIP_MAX_DAYS) {
+  if (options.withMid) {
     const mid = pullBackToCallDay(addDays(shippedOn, Math.floor(days / 2)));
     calls.push({ kind: 'mid', dueOn: notBeforeShipment(mid, shippedOn) });
   }
@@ -141,14 +141,17 @@ export function overdueDays(dueOn, today) {
 }
 
 // 일정을 고칠 때 쓴다. 이미 통화하거나 마감한 종류의 콜은 다시 만들지 않는다.
-export function replanPendingCalls(existingCalls, shippedOn, days) {
-  const finished = new Set((existingCalls ?? []).filter((c) => c.status !== 'pending').map((c) => c.kind));
-  const plan = planCalls(shippedOn, days);
+// 중간 콜 여부는 따로 알려주지 않으면 이미 있는 콜을 보고 그대로 지킨다.
+export function replanPendingCalls(existingCalls, shippedOn, days, options = {}) {
+  const existing = existingCalls ?? [];
+  const finished = new Set(existing.filter((c) => c.status !== 'pending').map((c) => c.kind));
+  const withMid = options.withMid ?? existing.some((c) => c.kind === 'mid');
+  const plan = planCalls(shippedOn, days, { withMid });
   return { runoutOn: plan.runoutOn, calls: plan.calls.filter((c) => !finished.has(c.kind)) };
 }
 
 export function dueDateWarning(dueOn, runoutOn) {
-  if (!isCallDay(dueOn)) return '목요일과 일요일에는 콜을 잡지 않아요.';
+  if (!isCallDay(dueOn)) return '목·토·일에는 콜을 잡지 않아요.';
   if (runoutOn && dueOn > runoutOn) return '소진일보다 늦은 날짜예요.';
   return null;
 }
