@@ -239,6 +239,8 @@
 .cal-cell:hover{border-color:var(--accent);}
 .cal-cell .d{font-family:var(--mono); font-size:12.5px; font-weight:700;}
 .cal-cell .n{font-size:11.5px; color:var(--text-muted); line-height:1.35;}
+.cal-cell .n.rx{color:var(--accent-strong); font-weight:600;}
+.sub-note{font-size:11.5px; font-weight:500; color:var(--text-faint); margin-left:6px;}
 .cal-cell.other{background:var(--bg); color:var(--text-faint);}
 .cal-cell.rest .d{color:var(--text-faint);}
 .cal-cell.today{border-color:var(--accent); border-width:2px; padding:5px 6px;}

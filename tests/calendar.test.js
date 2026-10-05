@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   monthKeyOf, shiftMonth, monthLabel, monthGrid,
   calendarDateOf, bucketByDate, undatedViews, countsOf, summarize,
+  prescriptionRows, bucketPrescriptionsByDate, prescriptionCountsOf,
 } from '../js/calendar.js';
 
 test('날짜에서 달을 뽑는다', () => {
@@ -77,4 +78,64 @@ test('달 요약은 지연과 연결률까지', () => {
 test('연결된 콜도 마감된 콜도 없으면 연결률은 없다', () => {
   const s = summarize([view({ dueOn: '2026-10-20', status: 'pending', doneAt: null })], '2026-10-15');
   assert.equal(s.rate, null);
+});
+
+// ---- 그날 처방한 환자 보기 (V2.2) ----
+
+const 환자들 = [
+  {
+    id: 'p1', name: '김환자', relation: 'self', deletedAt: null,
+    prescriptions: [
+      { id: 'r1', prescribedOn: '2026-10-05', shippedOn: '2026-10-05', days: 30, runoutOn: '2026-11-04', status: 'active', deletedAt: null, calls: [] },
+      { id: 'r2', prescribedOn: '2026-09-01', shippedOn: '2026-09-01', days: 10, runoutOn: '2026-09-11', status: 'closed', deletedAt: null, calls: [] },
+    ],
+  },
+  {
+    id: 'p2', name: '이환자', relation: 'child', deletedAt: null,
+    prescriptions: [
+      { id: 'r3', prescribedOn: '2026-10-05', shippedOn: null, days: 20, runoutOn: null, status: 'active', deletedAt: null, calls: [] },
+    ],
+  },
+  {
+    id: 'p3', name: '지운환자', relation: 'self', deletedAt: '2026-10-01T00:00:00Z',
+    prescriptions: [
+      { id: 'r4', prescribedOn: '2026-10-05', shippedOn: '2026-10-05', days: 15, runoutOn: '2026-10-20', status: 'active', deletedAt: null, calls: [] },
+    ],
+  },
+  {
+    id: 'p4', name: '휴지통처방', relation: 'self', deletedAt: null,
+    prescriptions: [
+      { id: 'r5', prescribedOn: '2026-10-05', shippedOn: null, days: 10, runoutOn: null, status: 'active', deletedAt: '2026-10-05T00:00:00Z', calls: [] },
+    ],
+  },
+];
+
+test('처방 줄은 환자와 처방을 함께 묶는다', () => {
+  const rows = prescriptionRows(환자들);
+  assert.deepEqual(rows.map((r) => r.prescription.id).sort(), ['r1', 'r2', 'r3']);
+  assert.equal(rows.find((r) => r.prescription.id === 'r3').patient.name, '이환자');
+});
+
+test('지운 환자와 휴지통 처방은 처방 줄에서 빠진다', () => {
+  const ids = prescriptionRows(환자들).map((r) => r.prescription.id);
+  assert.equal(ids.includes('r4'), false);
+  assert.equal(ids.includes('r5'), false);
+});
+
+test('처방은 처방일로 묶는다', () => {
+  const map = bucketPrescriptionsByDate(prescriptionRows(환자들));
+  assert.deepEqual([...map.keys()].sort(), ['2026-09-01', '2026-10-05']);
+  assert.equal(map.get('2026-10-05').length, 2);
+  assert.equal(map.get('2026-09-01').length, 1);
+});
+
+test('처방 줄은 이름 순으로 정렬한다', () => {
+  const map = bucketPrescriptionsByDate(prescriptionRows(환자들));
+  assert.deepEqual(map.get('2026-10-05').map((r) => r.patient.name), ['김환자', '이환자']);
+});
+
+test('그날 처방 집계는 발송과 발송 대기를 나눈다', () => {
+  const map = bucketPrescriptionsByDate(prescriptionRows(환자들));
+  assert.deepEqual(prescriptionCountsOf(map.get('2026-10-05')), { total: 2, shipped: 1, waiting: 1 });
+  assert.deepEqual(prescriptionCountsOf([]), { total: 0, shipped: 0, waiting: 0 });
 });

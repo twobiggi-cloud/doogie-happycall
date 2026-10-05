@@ -6,6 +6,7 @@ import {
 } from './schedule.js';
 import {
   monthKeyOf, shiftMonth, monthLabel, monthGrid, calendarDateOf, bucketByDate, undatedViews, countsOf, summarize,
+  prescriptionRows, bucketPrescriptionsByDate, prescriptionCountsOf,
 } from './calendar.js';
 import { buildBackup, backupFileName } from './backup.js';
 import {
@@ -283,14 +284,19 @@ function renderCalendar(today) {
   state.month = month;
   const views = callViews(state.patients);
   const buckets = bucketByDate(views);
+  const rxBuckets = bucketPrescriptionsByDate(prescriptionRows(state.patients));
   const waiting = undatedViews(views);
   const monthViews = views.filter((v) => {
     const date = calendarDateOf(v.call);
     return date && monthKeyOf(date) === month;
   });
   const sum = summarize(monthViews, today);
+  const monthRxCount = [...rxBuckets.entries()]
+    .filter(([date]) => monthKeyOf(date) === month)
+    .reduce((n, [, list]) => n + list.length, 0);
 
   const chips = [
+    `<span class="cal-chip">처방<b>${monthRxCount}</b></span>`,
     `<span class="cal-chip">해피콜<b>${sum.total}</b></span>`,
     `<span class="cal-chip">완료<b>${sum.done}</b></span>`,
     `<span class="cal-chip">남음<b>${sum.pending}</b></span>`,
@@ -310,9 +316,11 @@ function renderCalendar(today) {
     if (date === state.pickedDate) classes.push('picked');
     if (late) classes.push('has-late');
     if (counts.total > 0 && counts.pending === 0 && counts.sms === 0) classes.push('all-done');
-    const line = counts.total === 0 ? '' : `<div class="n">${counts.total}건 · ${counts.done}완료</div>`;
+    const rxCount = (rxBuckets.get(date) ?? []).length;
+    const line = counts.total === 0 ? '' : `<div class="n">콜 ${counts.total}건 · ${counts.done}완료</div>`;
+    const rxLine = rxCount === 0 ? '' : `<div class="n rx">처방 ${rxCount}명</div>`;
     return `<button class="${classes.join(' ')}" data-action="cal-day" data-id="${date}">
-      <span class="d">${Number(date.slice(8))}</span>${line}</button>`;
+      <span class="d">${Number(date.slice(8))}</span>${line}${rxLine}</button>`;
   }).join('')).join('');
 
   $('panel-calendar').innerHTML = `
@@ -327,19 +335,53 @@ function renderCalendar(today) {
     <div class="cal-grid">${DOW.map((d) => `<div class="cal-dow">${d}</div>`).join('')}${cells}</div>
     <div class="cal-day" id="cal-day"></div>`;
 
-  renderCalendarDay(buckets, today);
+  renderCalendarDay(buckets, rxBuckets, today);
 }
 
-function renderCalendarDay(buckets, today) {
+// 그날 처방한 환자 목록. 처방일 기준이라 그날 진료 기록과 맞춰 보며 빠진 환자를 찾는다.
+function prescriptionDaySection(rows) {
+  const c = prescriptionCountsOf(rows);
+  const head = `
+    <div class="section-title">이날 처방한 환자 <span class="sub-note">처방일 기준</span></div>
+    <div class="cal-summary">
+      <span class="cal-chip">처방<b>${c.total}</b></span>
+      <span class="cal-chip">발송함<b>${c.shipped}</b></span>
+      <span class="cal-chip">발송 대기<b>${c.waiting}</b></span>
+    </div>`;
+  if (c.total === 0) return `${head}<div class="empty">이날 처방한 환자가 없어요.</div>`;
+  const body = rows.map(({ patient, prescription }) => `
+    <div class="case-card">
+      <div class="case-top">
+        <div class="case-id">
+          <div class="case-name">${esc(patientLabel(patient))}</div>
+          <div class="case-meta-row">${conditionBadge(patient)}
+            ${prescription.status === 'active' ? '' : '<span class="badge badge-other">마감</span>'}</div>
+          <div class="case-phone mono">${esc(formatPhone(patient.phone))}</div>
+        </div>
+        <div class="case-due">
+          <div>${prescription.days}일분</div>
+          <div class="d">${prescription.shippedOn ? `발송 ${formatKoreanDate(prescription.shippedOn)}` : '발송 대기'}</div>
+          <div>${prescription.runoutOn ? `소진 ${formatKoreanDate(prescription.runoutOn)}` : ''}</div>
+        </div>
+      </div>
+      <div class="case-actions">
+        ${prescription.shippedOn ? '' : `<button class="btn btn-primary btn-sm" data-action="ship" data-id="${prescription.id}">📦 발송일 입력</button>`}
+        <button class="btn btn-ghost btn-sm" data-action="detail" data-id="${patient.id}">상세 · 이력</button>
+      </div>
+    </div>`).join('');
+  return head + body;
+}
+
+function renderCalendarDay(buckets, rxBuckets, today) {
   const date = state.pickedDate;
   if (!date) {
-    $('cal-day').innerHTML = '<div class="empty">날짜를 누르면 그날 해피콜이 여기 보여요.</div>';
+    $('cal-day').innerHTML = '<div class="empty">날짜를 누르면 그날 해피콜과 그날 처방한 환자가 여기 보여요.</div>';
     return;
   }
   const list = (buckets.get(date) ?? []).slice().sort((a, b) => a.patient.name.localeCompare(b.patient.name, 'ko'));
   const c = countsOf(list);
   const head = `
-    <div class="section-title">${formatKoreanDate(date)}</div>
+    <div class="section-title">${formatKoreanDate(date)} 해피콜</div>
     <div class="cal-summary">
       <span class="cal-chip">대상<b>${c.total}</b></span>
       <span class="cal-chip">완료<b>${c.done}</b></span>
@@ -349,7 +391,7 @@ function renderCalendarDay(buckets, today) {
   const body = list.length === 0
     ? '<div class="empty">이날은 잡힌 해피콜이 없어요.</div>'
     : list.map((v) => callCard(v, today)).join('');
-  $('cal-day').innerHTML = head + body;
+  $('cal-day').innerHTML = head + body + prescriptionDaySection(rxBuckets.get(date) ?? []);
 }
 
 function renderUnreached(rows) {

@@ -72,3 +72,39 @@ export function summarize(views, today) {
   const rate = reached === 0 ? null : Math.round((counts.done / reached) * 100);
   return { ...counts, late, rate };
 }
+
+// ---- 그날 처방한 환자 보기 ----
+// 달력에서 날짜를 누르면 그날 처방한 환자도 같이 본다. 처방 누락을 눈으로 잡으려는 것이다.
+// 기준 날짜는 '처방일'이다. 앱에 입력한 날이 아니라 원장님이 처방한 날로 묶는다.
+
+export function prescriptionRows(patients) {
+  const rows = [];
+  for (const patient of patients) {
+    if (patient.deletedAt) continue;
+    for (const prescription of patient.prescriptions) {
+      if (prescription.deletedAt) continue;
+      rows.push({ patient, prescription });
+    }
+  }
+  return rows;
+}
+
+export function bucketPrescriptionsByDate(rows) {
+  const map = new Map();
+  for (const row of rows) {
+    const date = row.prescription.prescribedOn;
+    if (!date) continue;
+    if (!map.has(date)) map.set(date, []);
+    map.get(date).push(row);
+  }
+  for (const list of map.values()) {
+    list.sort((a, b) => a.patient.name.localeCompare(b.patient.name, 'ko'));
+  }
+  return map;
+}
+
+export function prescriptionCountsOf(rows) {
+  const list = rows ?? [];
+  const shipped = list.filter((r) => r.prescription.shippedOn).length;
+  return { total: list.length, shipped, waiting: list.length - shipped };
+}
