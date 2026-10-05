@@ -50,6 +50,9 @@ export function toPatient(row) {
     deletedAt: row.deleted_at ?? null,
     condition: row.condition,
     conditionLabel: row.condition_label ?? '',
+    memo: row.memo ?? '',
+    memoUpdatedAt: row.memo_updated_at ?? null,
+    memoStaffName: row.memo_staff_name ?? '',
     prescriptions: (row.prescriptions ?? []).map((r) => toPrescription(r, row.id)).sort(newestFirst('prescribedOn')),
   };
 }

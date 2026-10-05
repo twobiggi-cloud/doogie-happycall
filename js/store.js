@@ -39,6 +39,7 @@ const PATIENT_MAX = 5000;
 
 const PATIENT_SELECT = `
   id, name, phone, relation, condition, condition_label, created_at, deleted_at,
+  memo, memo_updated_at, memo_staff_name,
   prescriptions (
     id, prescribed_on, shipped_on, days, runout_on, status, closed_reason, created_at, deleted_at,
     calls (
@@ -213,8 +214,18 @@ export async function saveCallOutcome(callId, o) {
 // 다른 직원이 먼저 처리했을 때 나는 오류인지 구분한다.
 const CONFLICT_MESSAGES = [
   '콜 상태가 바뀌었습니다', '발송일이 이미 입력됐습니다', '처방이 이미 바뀌었습니다', '재시도 콜이 이미 있습니다',
-  '이미 처리됐습니다',
+  '이미 처리됐습니다', '메모가 이미 바뀌었습니다',
 ];
+
+// 고치기 전에 보고 있던 메모(expectedMemo)를 함께 보낸다. 그 사이 남이 고쳤으면 저장이 막힌다.
+export async function savePatientMemo(patientId, { expectedMemo, memo }) {
+  const { error } = await supabase.rpc('save_patient_memo', {
+    p_patient_id: patientId,
+    p_expected_memo: expectedMemo ?? '',
+    p_memo: memo ?? '',
+  });
+  if (error) throw error;
+}
 
 export function isConflictError(err) {
   return Boolean(err && typeof err.message === 'string'

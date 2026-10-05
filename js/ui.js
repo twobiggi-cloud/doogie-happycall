@@ -624,6 +624,16 @@ export function openDetailModal(patient) {
       <button class="close-x" data-action="close">✕</button>
     </div>
     ${blocks || '<div class="empty">처방이 없어요.</div>'}
+    <div class="memo-box">
+      <div class="section-title">환자 메모 <span class="sub-note">이 환자에게 계속 따라다녀요</span></div>
+      <textarea id="pm-text" maxlength="1000" placeholder="예: 오전에는 전화 받기 어려움. 보호자에게 연락.">${esc(patient.memo)}</textarea>
+      <div class="memo-foot">
+        <span class="field-hint">${patient.memoUpdatedAt
+          ? `마지막 수정 ${localDate(patient.memoUpdatedAt)}${patient.memoStaffName ? ` · ${esc(patient.memoStaffName)}` : ''}`
+          : '아직 메모가 없어요.'}</span>
+        <button class="btn btn-primary btn-sm" data-action="save-memo" data-id="${patient.id}">메모 저장</button>
+      </div>
+    </div>
     <div class="modal-footer">
       <button class="btn btn-danger btn-sm" data-action="trash-patient" data-id="${patient.id}">🗑 환자 지우기</button>
       <button class="btn" data-action="close">닫기</button>
@@ -930,6 +940,7 @@ export function openCallModal(view) {
       </div>
       <button class="close-x" data-action="close">✕</button>
     </div>
+    ${patient.memo ? `<div class="preview-box">📝 환자 메모 · ${esc(patient.memo)}</div>` : ''}
     <div class="script-view">${esc(script)}</div>
     <div class="field">
       <label>증상 상태</label>
@@ -1364,6 +1375,13 @@ export function onAppClick(e) {
   if (action === 'escalate') openEscalationModal(findView(id));
   if (action === 'visit-booked') run(() => store.markVisitBooked(id), '예약 완료로 표시했어요.');
   if (action === 'save-script') run(() => store.saveScript(id, $(`script-${id}`).value), '스크립트를 저장했어요.');
+  if (action === 'save-memo') {
+    const patient = findPatient(id);
+    const memo = $('pm-text').value.trim();
+    if (!patient) return;
+    if (memo === patient.memo) { toast('바뀐 내용이 없어요.'); return; }
+    run(() => store.savePatientMemo(id, { expectedMemo: patient.memo, memo }), '메모를 저장했어요.');
+  }
 }
 
 let bound = false;

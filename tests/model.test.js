@@ -186,3 +186,20 @@ test('휴지통에는 지운 환자와 지운 처방이 최근 순으로', () =>
   assert.equal(rows[0].patient.id, 'p2');
   assert.equal(rows[1].prescription.id, 'r2');
 });
+
+test('toPatient는 환자 메모를 옮기고, 없으면 빈 값으로 둔다', () => {
+  const p = toPatient(row);
+  assert.equal(p.memo, '');
+  assert.equal(p.memoUpdatedAt, null);
+  assert.equal(p.memoStaffName, '');
+
+  const withMemo = toPatient({
+    ...row,
+    memo: '오전에는 전화 받기 어려움',
+    memo_updated_at: '2026-10-05T01:00:00Z',
+    memo_staff_name: '김직원',
+  });
+  assert.equal(withMemo.memo, '오전에는 전화 받기 어려움');
+  assert.equal(withMemo.memoUpdatedAt, '2026-10-05T01:00:00Z');
+  assert.equal(withMemo.memoStaffName, '김직원');
+});
