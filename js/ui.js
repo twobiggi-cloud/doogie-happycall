@@ -11,7 +11,7 @@ import {
 import { buildBackup, backupFileName } from './backup.js';
 import {
   todayCalls, upcomingCalls, escalationCalls, visitCalls, activePrescriptionCount, preRunoutCall, awaitingShipment,
-  callViews, unreachedRows, livePatients, trashRows,
+  callViews, unreachedRows, livePatients, trashRows, groupByKind, KIND_ORDER, pendingPlanOf,
 } from './model.js';
 import {
   CONDITION_LABELS, RESULT_LABELS, KIND_LABELS, CALL_STATUS_LABELS, DAYS_PRESETS, DEFAULT_SCRIPTS,
@@ -211,9 +211,16 @@ function callCard({ patient, prescription, call }, today) {
     </div>`;
 }
 
+// 중간 콜과 소진 전 콜이 섞이면 보기 어렵다는 접수실 의견에 따라 종류별 묶음으로 보여준다.
+function kindSections(views, today) {
+  return groupByKind(views).map(({ kind, views: list }) => `
+    <h3 class="section-title kind-title">${KIND_LABELS[kind]} <span class="sub-note">${list.length}건</span></h3>
+    ${list.map((v) => callCard(v, today)).join('')}`).join('');
+}
+
 function renderToday(list, today) {
   let html = list.length
-    ? list.map((v) => callCard(v, today)).join('')
+    ? kindSections(list, today)
     : '<div class="empty">오늘 걸 콜이 없어요.</div>';
   const upcoming = upcomingCalls(state.patients, today);
   if (upcoming.length) {
@@ -390,7 +397,7 @@ function renderCalendarDay(buckets, rxBuckets, today) {
     </div>`;
   const body = list.length === 0
     ? '<div class="empty">이날은 잡힌 해피콜이 없어요.</div>'
-    : list.map((v) => callCard(v, today)).join('');
+    : kindSections(list, today);
   $('cal-day').innerHTML = head + body + prescriptionDaySection(rxBuckets.get(date) ?? []);
 }
 
@@ -565,13 +572,12 @@ export function closeModal() {
   $('modal-root').innerHTML = '';
 }
 
-const KIND_ORDER = { mid: 0, pre_runout: 1 };
 
 export function openDetailModal(patient) {
   if (!patient) return;
   const blocks = patient.prescriptions.map((rx) => {
     const rxStatus = rx.status === 'active' ? '진행 중' : rx.closedReason === 'early' ? '조기 마감' : '마감';
-    const calls = rx.calls.slice().sort((a, b) => KIND_ORDER[a.kind] - KIND_ORDER[b.kind]).map((c) => {
+    const calls = rx.calls.slice().sort((a, b) => KIND_ORDER.indexOf(a.kind) - KIND_ORDER.indexOf(b.kind)).map((c) => {
       const open = rx.status === 'active';
       const buttons = [
         open && c.status === 'pending' ? `<button class="btn btn-sm" data-action="call" data-id="${c.id}">통화 기록</button>` : '',
