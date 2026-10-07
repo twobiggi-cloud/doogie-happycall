@@ -214,8 +214,20 @@ export async function saveCallOutcome(callId, o) {
 // 다른 직원이 먼저 처리했을 때 나는 오류인지 구분한다.
 const CONFLICT_MESSAGES = [
   '콜 상태가 바뀌었습니다', '발송일이 이미 입력됐습니다', '처방이 이미 바뀌었습니다', '재시도 콜이 이미 있습니다',
-  '이미 처리됐습니다', '메모가 이미 바뀌었습니다',
+  '이미 처리됐습니다', '메모가 이미 바뀌었습니다', '증상이 이미 바뀌었습니다',
 ];
+
+// 고치기 전에 보고 있던 증상을 함께 보낸다. 그 사이 남이 고쳤으면 저장이 막힌다.
+export async function updatePatientCondition(patientId, { expectedCondition, expectedLabel, condition, conditionLabel }) {
+  const { error } = await supabase.rpc('update_patient_condition', {
+    p_patient_id: patientId,
+    p_expected_condition: expectedCondition,
+    p_expected_label: expectedLabel ?? '',
+    p_condition: condition,
+    p_condition_label: condition === 'other' ? (conditionLabel ?? '') : '',
+  });
+  if (error) throw error;
+}
 
 // 고치기 전에 보고 있던 메모(expectedMemo)를 함께 보낸다. 그 사이 남이 고쳤으면 저장이 막힌다.
 export async function savePatientMemo(patientId, { expectedMemo, memo }) {

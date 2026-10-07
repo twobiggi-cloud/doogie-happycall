@@ -268,3 +268,4 @@
 .memo-box textarea{width:100%; min-height:84px; border:1px solid var(--border); border-radius:9px; padding:10px 12px; font-size:13.5px; line-height:1.6; background:var(--surface); color:var(--text); resize:vertical;}
 .memo-foot{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:8px;}
 .section-title.kind-title{margin-top:14px; padding-bottom:6px; border-bottom:2px solid var(--accent-soft);}
+.pc-other{width:100%; margin-top:8px; border:1px solid var(--border); border-radius:9px; padding:8px 12px; font-size:13.5px; background:var(--surface); color:var(--text);}

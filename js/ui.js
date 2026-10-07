@@ -631,6 +631,16 @@ export function openDetailModal(patient) {
     </div>
     ${blocks || '<div class="empty">처방이 없어요.</div>'}
     <div class="memo-box">
+      <div class="section-title">증상 <span class="sub-note">잘못 골랐으면 여기서 바꿔요</span></div>
+      ${pillGroup('pc-condition', Object.entries(CONDITION_LABELS), patient.condition)}
+      <input type="text" id="pc-other" class="pc-other" maxlength="50" placeholder="기타 증상 이름 (예: 아토피)"
+        value="${esc(patient.conditionLabel)}"${patient.condition === 'other' ? '' : ' hidden'}>
+      <div class="memo-foot">
+        <span class="field-hint">바꾸면 통화 스크립트도 바뀐 증상으로 나와요.</span>
+        <button class="btn btn-sm" data-action="save-condition" data-id="${patient.id}">증상 저장</button>
+      </div>
+    </div>
+    <div class="memo-box">
       <div class="section-title">환자 메모 <span class="sub-note">이 환자에게 계속 따라다녀요</span></div>
       <textarea id="pm-text" maxlength="1000" placeholder="예: 오전에는 전화 받기 어려움. 보호자에게 연락.">${esc(patient.memo)}</textarea>
       <div class="memo-foot">
@@ -645,6 +655,13 @@ export function openDetailModal(patient) {
       <button class="btn" data-action="close">닫기</button>
     </div>`, true);
   state.detailPatientId = patient.id;
+
+  $('pc-condition').addEventListener('click', (e) => {
+    const b = e.target.closest('.pill-opt');
+    if (!b) return;
+    selectPill('pc-condition', b.dataset.val);
+    $('pc-other').hidden = b.dataset.val !== 'other';
+  });
 }
 
 export async function copyText(text) {
@@ -690,7 +707,8 @@ export function openRegisterModal() {
     </div>
     <div class="field-row">
       <div class="field"><label>환자명 *</label><input type="text" id="rg-name" maxlength="50"></div>
-      <div class="field"><label>증상</label>${pillGroup('rg-condition', Object.entries(CONDITION_LABELS), form.condition)}</div>
+      <div class="field"><label>증상</label>${pillGroup('rg-condition', Object.entries(CONDITION_LABELS), form.condition)}
+        <span class="field-hint" id="rg-condition-hint" hidden>증상은 환자 상세 창에서 바꿀 수 있어요.</span></div>
     </div>
     <div class="field" id="rg-relation-field">
       <label>이 번호의 주인과의 관계</label>
@@ -732,6 +750,7 @@ export function openRegisterModal() {
     selectPill('rg-condition', condition);
     $('rg-other-field').hidden = condition !== 'other';
     document.querySelectorAll('#rg-condition .pill-opt').forEach((b) => { b.disabled = locked; });
+    $('rg-condition-hint').hidden = !locked;
   };
 
   const renderFamily = () => {
@@ -1381,6 +1400,17 @@ export function onAppClick(e) {
   if (action === 'escalate') openEscalationModal(findView(id));
   if (action === 'visit-booked') run(() => store.markVisitBooked(id), '예약 완료로 표시했어요.');
   if (action === 'save-script') run(() => store.saveScript(id, $(`script-${id}`).value), '스크립트를 저장했어요.');
+  if (action === 'save-condition') {
+    const patient = findPatient(id);
+    if (!patient) return;
+    const picked = document.querySelector('#pc-condition .pill-opt.selected');
+    const condition = picked ? picked.dataset.val : patient.condition;
+    const conditionLabel = condition === 'other' ? $('pc-other').value.trim() : '';
+    if (condition === patient.condition && conditionLabel === patient.conditionLabel) { toast('바뀐 내용이 없어요.'); return; }
+    run(() => store.updatePatientCondition(id, {
+      expectedCondition: patient.condition, expectedLabel: patient.conditionLabel, condition, conditionLabel,
+    }), `증상을 '${conditionText(condition, conditionLabel)}'(으)로 바꿨어요.`);
+  }
   if (action === 'save-memo') {
     const patient = findPatient(id);
     const memo = $('pm-text').value.trim();
