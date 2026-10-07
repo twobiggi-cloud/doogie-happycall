@@ -682,6 +682,14 @@ function selectPill(groupId, value) {
   document.querySelectorAll(`#${groupId} .pill-opt`).forEach((b) => b.classList.toggle('selected', b.dataset.val === String(value)));
 }
 
+// 콜 날짜 칸 아래 안내 문구. 목·토·일과 소진일 이후는 주황색으로 보여준다(소진일 이후는 저장 가능).
+function dueHintOf(value, runoutOn) {
+  if (!value) return { text: '날짜를 넣어주세요.', warn: true };
+  const warning = dueDateWarning(value, runoutOn);
+  if (warning) return { text: warning, warn: true };
+  return { text: `${formatKoreanDate(value)} · 소진 ${daysBetween(value, runoutOn)}일 전`, warn: false };
+}
+
 // ---- 처방 등록 ----
 
 export function openRegisterModal() {
@@ -810,14 +818,9 @@ export function openRegisterModal() {
       const kind = input.dataset.kind;
       form.due[kind] = input.value;
       const hint = document.querySelector(`#rg-plan [data-hint="${kind}"]`);
-      if (!input.value) {
-        hint.textContent = '날짜를 넣어주세요.';
-        hint.classList.add('warn');
-        return;
-      }
-      const warning = dueDateWarning(input.value, runout);
-      hint.textContent = warning ?? `${formatKoreanDate(input.value)} · 소진 ${daysBetween(input.value, runout)}일 전`;
-      hint.classList.toggle('warn', Boolean(warning));
+      const h = dueHintOf(input.value, runout);
+      hint.textContent = h.text;
+      hint.classList.toggle('warn', h.warn);
     });
     $('rg-warn').innerHTML = hasPastCall(callsFromForm(), today)
       ? '<div class="preview-box warn">이미 지난 콜 날짜가 있어요. 저장하면 바로 지연으로 떠요.</div>'
@@ -1124,62 +1127,103 @@ function openEditRxModal(patient, rx) {
       <button class="btn btn-primary" id="er-submit">저장</button>
     </div>`);
 
-  const read = () => {
+  const hadMid = rx.calls.some((c) => c.kind === 'mid');
+  const ed = { plan: null, due: {} };
+
+  const readBase = () => {
     const days = Number($('er-days').value);
     if (!isValidDays(days)) return null;
-    if ($('er-wait').checked) return { days, shippedOn: null, plan: null };
+    if ($('er-wait').checked) return { days, shippedOn: null };
     const shippedOn = $('er-ship').value;
     if (!shippedOn) return null;
-    return { days, shippedOn, plan: replanPendingCalls(rx.calls, shippedOn, days, { withMid: $('er-mid').checked }) };
+    return { days, shippedOn };
   };
 
-  const updatePreview = () => {
-    const r = read();
-    if (!r) {
+  // 발송일·투약일수·중간 콜이 처음 그대로면 지금 잡힌 콜 날짜를 보여준다.
+  // 셋 중 하나라도 바꾸면 규칙대로 다시 계산한다.
+  const planFor = (base) => {
+    const withMid = $('er-mid').checked;
+    const untouched = base.shippedOn === rx.shippedOn && base.days === rx.days && withMid === hadMid;
+    return untouched ? pendingPlanOf(rx) : replanPendingCalls(rx.calls, base.shippedOn, base.days, { withMid });
+  };
+
+  const callsFromForm = () => (ed.plan ? ed.plan.calls.map((c) => ({ kind: c.kind, dueOn: ed.due[c.kind] })) : []);
+
+  const updateWarnings = () => {
+    if (!ed.plan) return;
+    document.querySelectorAll('#er-preview .er-due').forEach((input) => {
+      const kind = input.dataset.kind;
+      ed.due[kind] = input.value;
+      const hint = document.querySelector(`#er-preview [data-hint="${kind}"]`);
+      const h = dueHintOf(input.value, ed.plan.runoutOn);
+      hint.textContent = h.text;
+      hint.classList.toggle('warn', h.warn);
+    });
+    $('er-warn').innerHTML = hasPastCall(callsFromForm(), today)
+      ? '<div class="preview-box warn">이미 지난 콜 날짜가 있어요. 저장하면 바로 지연으로 떠요.</div>'
+      : '';
+  };
+
+  const renderPlan = () => {
+    const base = readBase();
+    ed.plan = null;
+    ed.due = {};
+    if (!base) {
       $('er-preview').innerHTML = '<div class="preview-box warn">발송일과 투약 일수(1~90일)를 확인해주세요.</div>';
       return;
     }
-    if (!r.plan) {
+    if (!base.shippedOn) {
       $('er-preview').innerHTML = '<div class="preview-box warn">발송 대기로 되돌려요. 대기 중인 콜은 사라지고, 발송일을 다시 넣으면 새로 잡혀요.</div>';
       return;
     }
+    const plan = planFor(base);
+    ed.plan = plan;
+    plan.calls.forEach((c) => { ed.due[c.kind] = c.dueOn; });
     const kept = rx.calls.filter((c) => c.status !== 'pending');
-    const lines = r.plan.calls.map((c) => `${KIND_LABELS[c.kind]} ${formatKoreanDate(c.dueOn)}`).join(', ');
-    let html = `<div class="preview-box">소진일 ${formatKoreanDate(r.plan.runoutOn)}${lines ? ` · ${lines}` : ' · 새로 잡을 콜 없음'}</div>`;
-    if (kept.length > 0) {
-      html += `<div class="preview-box">이미 끝난 콜 ${kept.length}건은 그대로 둬요: ${kept.map((c) => KIND_LABELS[c.kind]).join(', ')}</div>`;
-    }
-    if (hasPastCall(r.plan.calls, today)) {
-      html += '<div class="preview-box warn">이미 지난 콜 날짜가 있어요. 저장하면 바로 지연으로 떠요.</div>';
-    }
-    $('er-preview').innerHTML = html;
+    $('er-preview').innerHTML = `
+      <div class="preview-box">소진일 ${formatKoreanDate(plan.runoutOn)}${plan.calls.length ? ' · 아래 날짜를 직접 고칠 수 있어요.' : ' · 새로 잡을 콜 없음'}</div>
+      ${plan.calls.map((c) => `
+        <div class="field">
+          <label>${KIND_LABELS[c.kind]} 날짜</label>
+          <input type="date" class="er-due" data-kind="${c.kind}" value="${c.dueOn}">
+          <span class="field-hint" data-hint="${c.kind}"></span>
+        </div>`).join('')}
+      ${kept.length ? `<div class="preview-box">이미 끝난 콜 ${kept.length}건은 그대로 둬요: ${kept.map((c) => KIND_LABELS[c.kind]).join(', ')}</div>` : ''}
+      <div id="er-warn"></div>`;
+    updateWarnings();
   };
 
-  $('er-ship').addEventListener('input', updatePreview);
-  $('er-mid').addEventListener('change', updatePreview);
-  $('er-days').addEventListener('input', () => { selectPill('er-days-presets', $('er-days').value); updatePreview(); });
+  $('er-ship').addEventListener('input', renderPlan);
+  $('er-mid').addEventListener('change', renderPlan);
+  $('er-days').addEventListener('input', () => { selectPill('er-days-presets', $('er-days').value); renderPlan(); });
   $('er-days-presets').addEventListener('click', (e) => {
     const b = e.target.closest('.pill-opt');
     if (!b) return;
     $('er-days').value = b.dataset.val;
     selectPill('er-days-presets', b.dataset.val);
-    updatePreview();
+    renderPlan();
   });
-  $('er-wait').addEventListener('change', () => { $('er-ship').disabled = $('er-wait').checked; updatePreview(); });
+  $('er-wait').addEventListener('change', () => { $('er-ship').disabled = $('er-wait').checked; renderPlan(); });
+  $('er-preview').addEventListener('input', (e) => {
+    if (e.target.classList.contains('er-due')) updateWarnings();
+  });
   $('er-ship').disabled = $('er-wait').checked;
-  updatePreview();
+  renderPlan();
 
   $('er-submit').addEventListener('click', async () => {
-    const r = read();
+    const base = readBase();
     const reason = $('er-reason').value.trim();
-    if (!r) { toast('발송일과 투약 일수를 확인해주세요.'); return; }
+    if (!base) { toast('발송일과 투약 일수를 확인해주세요.'); return; }
+    const calls = callsFromForm();
+    if (calls.some((c) => !c.dueOn)) { toast('콜 날짜를 모두 넣어주세요.'); return; }
+    if (calls.some((c) => !isCallDay(c.dueOn))) { toast('목·토·일에는 콜을 잡지 않아요.'); return; }
     if (!reason) { toast('바꾸는 이유를 적어주세요.'); return; }
     const ok = await run(() => store.updatePrescriptionSchedule(rx.id, {
       expectedShippedOn: rx.shippedOn,
-      shippedOn: r.shippedOn,
-      days: r.days,
-      runoutOn: r.plan ? r.plan.runoutOn : null,
-      calls: r.plan ? r.plan.calls : [],
+      shippedOn: base.shippedOn,
+      days: base.days,
+      runoutOn: ed.plan ? ed.plan.runoutOn : null,
+      calls: ed.plan ? calls : [],
       reason,
     }), '일정을 고쳤어요.');
     if (ok) closeModal();
