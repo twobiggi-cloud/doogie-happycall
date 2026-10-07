@@ -900,8 +900,8 @@ export function openRegisterModal() {
     const calls = callsFromForm();
     if (read.shippedOn) {
       if (calls.length === 0 || calls.some((c) => !c.dueOn)) { toast('전화 날짜를 모두 넣어주세요.'); return; }
-      const bad = calls.map((c) => dueDateWarning(c.dueOn, form.plan.runoutOn)).find(Boolean);
-      if (bad) { toast(bad); return; }
+      // 소진일 이후는 환자 사정으로 일부러 잡을 수 있어 막지 않는다. 쉬는 요일만 막는다.
+      if (calls.some((c) => !isCallDay(c.dueOn))) { toast('목·토·일에는 콜을 잡지 않아요.'); return; }
     }
     const ok = await run(() => store.registerPrescription({
       phone,
