@@ -37,6 +37,7 @@ function toPrescription(r, patientId) {
     status: r.status,
     closedReason: r.closed_reason,
     deletedAt: r.deleted_at ?? null,
+    createdAt: r.created_at ?? null,
     calls: (r.calls ?? []).map((c) => toCall(c, r.id)),
   };
 }
@@ -174,4 +175,23 @@ export function trashRows(patients) {
     }
   }
   return rows.sort((a, b) => (a.deletedAt < b.deletedAt ? 1 : -1));
+}
+
+// 해피콜 목록을 콜 종류별로 나눈다. 중간 콜과 소진 전 콜이 섞여 있으면 보기 어렵다는 접수실 의견.
+export const KIND_ORDER = ['mid', 'pre_runout', 'retry'];
+
+export function groupByKind(views) {
+  return KIND_ORDER
+    .map((kind) => ({ kind, views: views.filter((v) => v.call.kind === kind) }))
+    .filter((g) => g.views.length > 0);
+}
+
+// 일정 고치기 창을 처음 열 때 보여줄 계획. 규칙으로 다시 계산하지 않고, 지금 잡힌 날짜를 그대로 쓴다.
+// (전에 손으로 옮겨 둔 날짜가 창을 여는 것만으로 되돌아가지 않게)
+export function pendingPlanOf(prescription) {
+  const calls = prescription.calls
+    .filter((c) => c.status === 'pending' && c.dueOn)
+    .sort((a, b) => KIND_ORDER.indexOf(a.kind) - KIND_ORDER.indexOf(b.kind))
+    .map((c) => ({ kind: c.kind, dueOn: c.dueOn }));
+  return { runoutOn: prescription.runoutOn, calls };
 }

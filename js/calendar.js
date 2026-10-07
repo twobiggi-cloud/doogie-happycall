@@ -76,6 +76,7 @@ export function summarize(views, today) {
 // ---- 그날 처방한 환자 보기 ----
 // 달력에서 날짜를 누르면 그날 처방한 환자도 같이 본다. 처방 누락을 눈으로 잡으려는 것이다.
 // 기준 날짜는 '처방일'이다. 앱에 입력한 날이 아니라 원장님이 처방한 날로 묶는다.
+// 같은 날 안에서는 앱에 등록한 순서대로 둔다(접수실에서 차트를 넘기며 넣은 순서와 같다).
 
 export function prescriptionRows(patients) {
   const rows = [];
@@ -97,9 +98,15 @@ export function bucketPrescriptionsByDate(rows) {
     if (!map.has(date)) map.set(date, []);
     map.get(date).push(row);
   }
-  for (const list of map.values()) {
-    list.sort((a, b) => a.patient.name.localeCompare(b.patient.name, 'ko'));
-  }
+  const byRegistered = (a, b) => {
+    const x = a.prescription.createdAt;
+    const y = b.prescription.createdAt;
+    if (x && y && x !== y) return x < y ? -1 : 1;
+    if (x && !y) return -1;
+    if (!x && y) return 1;
+    return a.patient.name.localeCompare(b.patient.name, 'ko');
+  };
+  for (const list of map.values()) list.sort(byRegistered);
   return map;
 }
 

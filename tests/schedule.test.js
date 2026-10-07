@@ -281,7 +281,7 @@ test('중간 콜을 끄면 대기 중인 중간 콜은 계획에서 빠진다', 
 test('날짜 경고는 쉬는 요일과 소진일 이후', () => {
   assert.equal(dueDateWarning('2026-10-11', '2026-10-20'), '목·토·일에는 콜을 잡지 않아요.');
   assert.equal(dueDateWarning('2026-10-10', '2026-10-20'), '목·토·일에는 콜을 잡지 않아요.');
-  assert.equal(dueDateWarning('2026-10-21', '2026-10-20'), '소진일보다 늦은 날짜예요.');
+  assert.equal(dueDateWarning('2026-10-21', '2026-10-20'), '소진일 이후예요. 환자 사정이 있을 때만 이렇게 잡으세요.');
   assert.equal(dueDateWarning('2026-10-20', '2026-10-20'), null);
   assert.equal(dueDateWarning('2026-10-20', null), null);
 });
@@ -303,4 +303,37 @@ test('재시도 콜도 부재 3회면 문자로 마감한다', () => {
 test('재시도 콜에서 통화가 되면 진행 중인 처방을 마감한다', () => {
   const out = decideAnswered({ kind: 'retry' }, { result: 'improved', note: '', visitNeeded: false, closeEarly: false });
   assert.equal(out.closePrescription, 'completed');
+});
+
+// ---- V2.3: 소진일 이후 콜 ----
+
+test('소진일 이후로 일부러 잡은 소진 전 콜은 부재 한 번에 마감하지 않는다', () => {
+  // 소진 10-15인데 환자 사정으로 10-19(월)에 걸기로 함 → 부재면 다음 콜 요일 10-20(화)
+  assert.deepEqual(
+    decideNoAnswer({ kind: 'pre_runout', noAnswerCount: 0, dueOn: '2026-10-19' }, { today: '2026-10-19', runoutOn: '2026-10-15' }),
+    { status: 'pending', dueOn: '2026-10-20', noAnswerCount: 1 },
+  );
+});
+
+test('소진일 이후 소진 전 콜도 부재 3회면 문자 대기', () => {
+  assert.deepEqual(
+    decideNoAnswer({ kind: 'pre_runout', noAnswerCount: 2, dueOn: '2026-10-19' }, { today: '2026-10-21', runoutOn: '2026-10-15' }),
+    { status: 'sms_pending', dueOn: null, noAnswerCount: 3 },
+  );
+});
+
+test('소진일 전에 잡힌 소진 전 콜은 재시도가 소진일에 닿으면 그대로 문자 대기', () => {
+  assert.deepEqual(
+    decideNoAnswer({ kind: 'pre_runout', noAnswerCount: 0, dueOn: '2026-10-14' }, { today: '2026-10-14', runoutOn: '2026-10-15' }),
+    { status: 'sms_pending', dueOn: null, noAnswerCount: 1 },
+  );
+});
+
+test('일정을 다시 잡아도 대기 중인 재시도 콜은 날짜 그대로 남긴다', () => {
+  const existing = [
+    { kind: 'pre_runout', status: 'done', dueOn: '2026-10-12' },
+    { kind: 'retry', status: 'pending', dueOn: '2026-10-21' },
+  ];
+  const out = replanPendingCalls(existing, '2026-10-05', 10);
+  assert.deepEqual(out.calls, [{ kind: 'retry', dueOn: '2026-10-21' }]);
 });

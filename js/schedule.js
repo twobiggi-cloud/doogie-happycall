@@ -102,7 +102,9 @@ export function decideNoAnswer(call, ctx) {
     return { status: 'pending', dueOn: next, noAnswerCount };
   }
   // 재시도 콜은 소진일이 지난 뒤에 거는 콜이라 소진일 기준으로 앞당겨 마감하지 않는다.
-  const pastRunout = call.kind === 'pre_runout' && next >= ctx.runoutOn;
+  // 환자 사정으로 소진일 이후에 잡은 소진 전 콜도 같다. 부재 3회까지는 다시 건다.
+  const scheduledAfterRunout = Boolean(call.dueOn) && call.dueOn >= ctx.runoutOn;
+  const pastRunout = call.kind === 'pre_runout' && !scheduledAfterRunout && next >= ctx.runoutOn;
   if (noAnswerCount >= MAX_NO_ANSWER || pastRunout) {
     return { status: 'sms_pending', dueOn: null, noAnswerCount };
   }
@@ -147,11 +149,15 @@ export function replanPendingCalls(existingCalls, shippedOn, days, options = {})
   const finished = new Set(existing.filter((c) => c.status !== 'pending').map((c) => c.kind));
   const withMid = options.withMid ?? existing.some((c) => c.kind === 'mid');
   const plan = planCalls(shippedOn, days, { withMid });
-  return { runoutOn: plan.runoutOn, calls: plan.calls.filter((c) => !finished.has(c.kind)) };
+  // 재시도 콜은 규칙으로 계산하는 콜이 아니다. 대기 중이면 날짜 그대로 둔다.
+  const retries = existing
+    .filter((c) => c.kind === 'retry' && c.status === 'pending')
+    .map((c) => ({ kind: 'retry', dueOn: c.dueOn }));
+  return { runoutOn: plan.runoutOn, calls: [...plan.calls.filter((c) => !finished.has(c.kind)), ...retries] };
 }
 
 export function dueDateWarning(dueOn, runoutOn) {
   if (!isCallDay(dueOn)) return '목·토·일에는 콜을 잡지 않아요.';
-  if (runoutOn && dueOn > runoutOn) return '소진일보다 늦은 날짜예요.';
+  if (runoutOn && dueOn > runoutOn) return '소진일 이후예요. 환자 사정이 있을 때만 이렇게 잡으세요.';
   return null;
 }

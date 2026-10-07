@@ -86,14 +86,14 @@ const 환자들 = [
   {
     id: 'p1', name: '김환자', relation: 'self', deletedAt: null,
     prescriptions: [
-      { id: 'r1', prescribedOn: '2026-10-05', shippedOn: '2026-10-05', days: 30, runoutOn: '2026-11-04', status: 'active', deletedAt: null, calls: [] },
+      { id: 'r1', prescribedOn: '2026-10-05', shippedOn: '2026-10-05', days: 30, runoutOn: '2026-11-04', status: 'active', deletedAt: null, createdAt: '2026-10-06T01:00:00Z', calls: [] },
       { id: 'r2', prescribedOn: '2026-09-01', shippedOn: '2026-09-01', days: 10, runoutOn: '2026-09-11', status: 'closed', deletedAt: null, calls: [] },
     ],
   },
   {
     id: 'p2', name: '이환자', relation: 'child', deletedAt: null,
     prescriptions: [
-      { id: 'r3', prescribedOn: '2026-10-05', shippedOn: null, days: 20, runoutOn: null, status: 'active', deletedAt: null, calls: [] },
+      { id: 'r3', prescribedOn: '2026-10-05', shippedOn: null, days: 20, runoutOn: null, status: 'active', deletedAt: null, createdAt: '2026-10-06T00:30:00Z', calls: [] },
     ],
   },
   {
@@ -129,9 +129,18 @@ test('처방은 처방일로 묶는다', () => {
   assert.equal(map.get('2026-09-01').length, 1);
 });
 
-test('처방 줄은 이름 순으로 정렬한다', () => {
+test('처방 줄은 앱에 등록한 순서대로 놓는다', () => {
+  // 이환자를 먼저(00:30) 등록하고 김환자를 나중(01:00)에 등록했다
   const map = bucketPrescriptionsByDate(prescriptionRows(환자들));
-  assert.deepEqual(map.get('2026-10-05').map((r) => r.patient.name), ['김환자', '이환자']);
+  assert.deepEqual(map.get('2026-10-05').map((r) => r.patient.name), ['이환자', '김환자']);
+});
+
+test('등록 시각이 없는 처방은 맨 뒤에 둔다', () => {
+  const rows = [
+    { patient: { name: '가' }, prescription: { prescribedOn: '2026-10-05', createdAt: null } },
+    { patient: { name: '나' }, prescription: { prescribedOn: '2026-10-05', createdAt: '2026-10-05T03:00:00Z' } },
+  ];
+  assert.deepEqual(bucketPrescriptionsByDate(rows).get('2026-10-05').map((r) => r.patient.name), ['나', '가']);
 });
 
 test('그날 처방 집계는 발송과 발송 대기를 나눈다', () => {

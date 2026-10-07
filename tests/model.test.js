@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   toPatient, callViews, todayCalls, upcomingCalls, escalationCalls, visitCalls,
+  groupByKind, pendingPlanOf,
   preRunoutCall, activePrescriptionCount, awaitingShipment, unreachedRows, livePatients, trashRows,
 } from '../js/model.js';
 
@@ -202,4 +203,34 @@ test('toPatient는 환자 메모를 옮기고, 없으면 빈 값으로 둔다', 
   assert.equal(withMemo.memo, '오전에는 전화 받기 어려움');
   assert.equal(withMemo.memoUpdatedAt, '2026-10-05T01:00:00Z');
   assert.equal(withMemo.memoStaffName, '김직원');
+});
+
+// ---- V2.3: 콜 종류별로 나누기, 일정 고치기 첫 화면 ----
+
+test('toPatient는 처방 등록 시각을 옮긴다', () => {
+  const p = toPatient({ ...row, prescriptions: [{ ...row.prescriptions[0], created_at: '2026-10-05T00:10:00Z' }] });
+  assert.equal(p.prescriptions[0].createdAt, '2026-10-05T00:10:00Z');
+  assert.equal(toPatient(row).prescriptions[0].createdAt ?? null, row.prescriptions[0].created_at ?? null);
+});
+
+test('콜을 중간 콜 · 소진 전 콜 · 재시도 콜 순서로 나누고, 빈 묶음은 뺀다', () => {
+  const v = (id, kind) => ({ call: { id, kind } });
+  const groups = groupByKind([v('a', 'pre_runout'), v('b', 'mid'), v('c', 'pre_runout'), v('d', 'mid')]);
+  assert.deepEqual(groups.map((g) => g.kind), ['mid', 'pre_runout']);
+  assert.deepEqual(groups[0].views.map((x) => x.call.id), ['b', 'd']);
+  assert.deepEqual(groups[1].views.map((x) => x.call.id), ['a', 'c']);
+  assert.deepEqual(groupByKind([v('r', 'retry'), v('m', 'mid')]).map((g) => g.kind), ['mid', 'retry']);
+  assert.deepEqual(groupByKind([]), []);
+});
+
+test('일정 고치기 첫 화면은 대기 콜의 지금 날짜를 그대로 보여준다', () => {
+  const rx = {
+    runoutOn: '2026-11-04',
+    calls: [
+      { kind: 'pre_runout', status: 'pending', dueOn: '2026-10-28' },
+      { kind: 'mid', status: 'done', dueOn: '2026-10-19' },
+      { kind: 'retry', status: 'sms_pending', dueOn: null },
+    ],
+  };
+  assert.deepEqual(pendingPlanOf(rx), { runoutOn: '2026-11-04', calls: [{ kind: 'pre_runout', dueOn: '2026-10-28' }] });
 });
