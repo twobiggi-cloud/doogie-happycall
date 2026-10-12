@@ -104,6 +104,10 @@ test('본인이 아니면 보호자를 부른다', () => {
   assert.equal(addressName({ name: '홍아이', relation: 'child' }), '홍아이님 보호자');
 });
 
+test('콜 종류 이름에 경과 확인 콜이 있다', () => {
+  assert.equal(KIND_LABELS.followup, '경과 확인 콜');
+});
+
 test('콜 종류 이름에 재시도 콜이 있다', () => {
   assert.equal(KIND_LABELS.retry, '재시도 콜');
 });

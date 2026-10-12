@@ -54,6 +54,13 @@ export function todayYMD(now = new Date()) {
 }
 
 // 복용은 약을 받은 날부터 시작한다. 모든 계산의 기준은 발송일이다.
+// '오늘부터 며칠 뒤'로 콜 날짜를 잡는다. 재해피콜과 경과 확인 콜이 쓴다.
+// 쉬는 요일이면 앞으로 당기고, 당기다 오늘 이전이 되면 다음 콜 요일로 민다.
+export function callDateAfter(fromYmd, days) {
+  const pulled = pullBackToCallDay(addDays(fromYmd, days));
+  return pulled > fromYmd ? pulled : nextCallDayAfter(fromYmd);
+}
+
 export function runoutOn(shippedOn, days) {
   return addDays(shippedOn, days);
 }

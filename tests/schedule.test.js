@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   addDays, daysBetween, isoDay, isCallDay, pullBackToCallDay, nextCallDayAfter, todayYMD,
-  runoutOn, planCalls, hasPastCall, decideNoAnswer, decideSmsSent, decideAnswered,
+  runoutOn, planCalls, hasPastCall, decideNoAnswer, decideSmsSent, decideAnswered, callDateAfter,
   defaultVisitNeededFor, isOnTodayList, overdueDays, preRunoutOffsetFor, isShipmentOverdue, replanPendingCalls, dueDateWarning,
 } from '../js/schedule.js';
 
@@ -336,4 +336,20 @@ test('일정을 다시 잡아도 대기 중인 재시도 콜은 날짜 그대로
   ];
   const out = replanPendingCalls(existing, '2026-10-05', 10);
   assert.deepEqual(out.calls, [{ kind: 'retry', dueOn: '2026-10-21' }]);
+});
+
+// ---- V2.4: 재해피콜·경과 확인 콜 날짜 ----
+
+test('며칠 뒤 콜 날짜는 쉬는 요일이면 앞으로 당긴다', () => {
+  // 2026-10-12(월)에서 7일 뒤 → 10-19(월) 그대로
+  assert.equal(callDateAfter('2026-10-12', 7), '2026-10-19');
+  // 2026-10-12(월)에서 5일 뒤 → 10-17(토) → 금요일 10-16
+  assert.equal(callDateAfter('2026-10-12', 5), '2026-10-16');
+  // 2026-10-12(월)에서 30일 뒤 → 11-11(수) 그대로
+  assert.equal(callDateAfter('2026-10-12', 30), '2026-11-11');
+});
+
+test('며칠 뒤 날짜를 당기다 오늘 이전이 되면 다음 콜 요일로 민다', () => {
+  // 2026-10-16(금)에서 1일 뒤 → 10-17(토) → 당기면 10-16(오늘) → 다음 콜 요일 10-19(월)
+  assert.equal(callDateAfter('2026-10-16', 1), '2026-10-19');
 });

@@ -1,5 +1,5 @@
 // Supabase에서 받은 행을 화면이 쓰는 모양으로 바꾸고, 탭별 목록을 고른다.
-import { isOnTodayList, addDays, isShipmentOverdue } from './schedule.js';
+import { isOnTodayList, addDays, isShipmentOverdue, daysBetween } from './schedule.js';
 
 const newestFirst = (key) => (a, b) => (a[key] < b[key] ? 1 : a[key] > b[key] ? -1 : 0);
 
@@ -19,6 +19,9 @@ function toCall(c, prescriptionId) {
     note: c.note ?? '',
     visitNeeded: c.visit_needed,
     visitBooked: c.visit_booked,
+    visitCheckOn: c.visit_check_on ?? null,
+    visitConfirmedAt: c.visit_confirmed_at ?? null,
+    visitResult: c.visit_result ?? null,
     escalation: c.escalation,
     escalatedAt: c.escalated_at,
     doneAt: c.done_at,
@@ -178,7 +181,7 @@ export function trashRows(patients) {
 }
 
 // 해피콜 목록을 콜 종류별로 나눈다. 중간 콜과 소진 전 콜이 섞여 있으면 보기 어렵다는 접수실 의견.
-export const KIND_ORDER = ['mid', 'pre_runout', 'retry'];
+export const KIND_ORDER = ['mid', 'pre_runout', 'retry', 'followup'];
 
 export function groupByKind(views) {
   return KIND_ORDER
@@ -194,4 +197,30 @@ export function pendingPlanOf(prescription) {
     .sort((a, b) => KIND_ORDER.indexOf(a.kind) - KIND_ORDER.indexOf(b.kind))
     .map((c) => ({ kind: c.kind, dueOn: c.dueOn }));
   return { runoutOn: prescription.runoutOn, calls };
+}
+
+// 내원 예약을 했다고 표시한 콜은 '언제까지 실제로 왔는지' 확인해야 한다.
+// 확인 날짜가 오늘까지인 것만 보여준다(미래 날짜는 아직 확인할 때가 아니다).
+export function visitCheckRows(patients, today) {
+  const rows = [];
+  for (const { patient, prescription, call } of callViews(patients)) {
+    if (!call.visitBooked || !call.visitCheckOn || call.visitConfirmedAt) continue;
+    if (call.visitCheckOn > today) continue;
+    rows.push({
+      patient,
+      prescription,
+      call,
+      checkOn: call.visitCheckOn,
+      overdueDays: daysBetween(call.visitCheckOn, today),
+    });
+  }
+  return rows.sort((a, b) => (a.checkOn < b.checkOn ? -1 : a.checkOn > b.checkOn ? 1
+    : a.patient.name.localeCompare(b.patient.name, 'ko')));
+}
+
+// 경과 확인 콜은 처방을 새로 넣지 않고 가장 최근 처방에 붙인다.
+export function latestPrescriptionOf(patient) {
+  const live = (patient.prescriptions ?? []).filter((r) => !r.deletedAt);
+  if (live.length === 0) return null;
+  return live.slice().sort((a, b) => (a.prescribedOn < b.prescribedOn ? 1 : -1))[0];
 }

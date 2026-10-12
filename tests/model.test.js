@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   toPatient, callViews, todayCalls, upcomingCalls, escalationCalls, visitCalls,
-  groupByKind, pendingPlanOf,
+  groupByKind, pendingPlanOf, visitCheckRows, latestPrescriptionOf,
   preRunoutCall, activePrescriptionCount, awaitingShipment, unreachedRows, livePatients, trashRows,
 } from '../js/model.js';
 
@@ -233,4 +233,75 @@ test('일정 고치기 첫 화면은 대기 콜의 지금 날짜를 그대로 �
     ],
   };
   assert.deepEqual(pendingPlanOf(rx), { runoutOn: '2026-11-04', calls: [{ kind: 'pre_runout', dueOn: '2026-10-28' }] });
+});
+
+// ---- V2.4: 내원 확인 목록 ----
+
+const visitPatient = (id, name, call) => ({
+  id, name, phone: '0101234567' + id.slice(-1), relation: 'self', condition: 'urticaria', conditionLabel: '',
+  deletedAt: null, memo: '', memoUpdatedAt: null, memoStaffName: '',
+  prescriptions: [{
+    id: 'r' + id, patientId: id, prescribedOn: '2026-10-01', shippedOn: '2026-10-01', days: 30,
+    runoutOn: '2026-10-31', status: 'active', closedReason: null, deletedAt: null, createdAt: null,
+    calls: [{
+      id: 'c' + id, prescriptionId: 'r' + id, kind: 'pre_runout', dueOn: '2026-10-12', status: 'done',
+      noAnswerCount: 0, result: 'same', note: '', visitNeeded: true, visitBooked: true,
+      visitCheckOn: null, visitConfirmedAt: null, visitResult: null,
+      escalation: 'none', escalatedAt: null, doneAt: '2026-10-12T02:00:00Z', attempts: [], ...call,
+    }],
+  }],
+});
+
+test('내원 확인 목록은 예약한 콜 중 확인 날짜가 오늘까지인 것만, 이른 날짜 먼저', () => {
+  const patients = [
+    visitPatient('p1', '가환자', { visitCheckOn: '2026-10-19' }),
+    visitPatient('p2', '나환자', { visitCheckOn: '2026-10-16' }),
+    visitPatient('p3', '다환자', { visitCheckOn: '2026-10-26' }),          // 아직 확인할 날이 아님
+    visitPatient('p4', '라환자', { visitCheckOn: '2026-10-15', visitConfirmedAt: '2026-10-15T01:00:00Z', visitResult: 'visited' }), // 이미 확인함
+    visitPatient('p5', '마환자', { visitCheckOn: null }),                   // 확인 날짜 없음
+    visitPatient('p6', '바환자', { visitBooked: false, visitCheckOn: '2026-10-13' }), // 아직 예약 전
+  ];
+  const rows = visitCheckRows(patients, '2026-10-19');
+  assert.deepEqual(rows.map((r) => r.patient.name), ['나환자', '가환자']);
+  assert.equal(rows[0].checkOn, '2026-10-16');
+  assert.equal(rows[0].overdueDays, 3);
+  assert.equal(rows[1].overdueDays, 0);
+});
+
+test('가장 최근 처방은 처방일이 늦은 것, 없으면 null', () => {
+  const patient = {
+    prescriptions: [
+      { id: 'r1', prescribedOn: '2026-09-01', deletedAt: null },
+      { id: 'r2', prescribedOn: '2026-10-05', deletedAt: null },
+      { id: 'r3', prescribedOn: '2026-10-09', deletedAt: '2026-10-09T00:00:00Z' },
+    ],
+  };
+  assert.equal(latestPrescriptionOf(patient).id, 'r2');
+  assert.equal(latestPrescriptionOf({ prescriptions: [] }), null);
+});
+
+test('콜 종류 묶음에 경과 확인 콜이 재시도 콜 뒤로 들어간다', () => {
+  const v = (id, kind) => ({ call: { id, kind } });
+  const groups = groupByKind([v('f', 'followup'), v('r', 'retry'), v('p', 'pre_runout')]);
+  assert.deepEqual(groups.map((g) => g.kind), ['pre_runout', 'retry', 'followup']);
+});
+
+test('toPatient는 내원 확인 칸을 옮긴다', () => {
+  const p = toPatient({
+    ...row,
+    prescriptions: [{
+      ...row.prescriptions[0],
+      calls: [{
+        ...row.prescriptions[0].calls[0],
+        visit_check_on: '2026-10-19',
+        visit_confirmed_at: '2026-10-19T02:00:00Z',
+        visit_result: 'visited',
+      }],
+    }],
+  });
+  const call = p.prescriptions[0].calls[0];
+  assert.equal(call.visitCheckOn, '2026-10-19');
+  assert.equal(call.visitConfirmedAt, '2026-10-19T02:00:00Z');
+  assert.equal(call.visitResult, 'visited');
+  assert.equal(toPatient(row).prescriptions[0].calls[0].visitCheckOn, null);
 });
