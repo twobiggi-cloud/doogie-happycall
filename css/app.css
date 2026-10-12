@@ -269,3 +269,10 @@
 .memo-foot{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:8px;}
 .section-title.kind-title{margin-top:14px; padding-bottom:6px; border-bottom:2px solid var(--accent-soft);}
 .pc-other{width:100%; margin-top:8px; border:1px solid var(--border); border-radius:9px; padding:8px 12px; font-size:13.5px; background:var(--surface); color:var(--text);}
+.quick-row{display:flex; gap:6px; margin-bottom:8px; flex-wrap:wrap;}
+#cl-retry-box input[type=date], #cl-visit-box input[type=date]{width:100%; border:1px solid var(--border); border-radius:9px; padding:8px 12px; font-size:13.5px; background:var(--surface); color:var(--text);}
+
+/* 재해피콜·경과 확인 콜을 눈에 띄게 */
+.badge-retry-hi{background:#fff3b0; color:#8a6100; font-weight:800; box-shadow:0 0 0 1px #f2d35a inset;}
+.badge-followup{background:#e6f0ff; color:#1d4ed8; font-weight:700;}
+.case-card.retry-hi{border-left:4px solid #f0c417; background:linear-gradient(90deg, #fffbe6 0%, var(--surface) 38%);}

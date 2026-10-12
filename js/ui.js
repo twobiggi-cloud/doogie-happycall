@@ -2,7 +2,7 @@ import * as store from './store.js';
 import {
   todayYMD, overdueDays, planCalls, hasPastCall, decideNoAnswer, decideSmsSent, decideAnswered,
   defaultVisitNeededFor, isCallDay, replanPendingCalls, dueDateWarning, nextCallDayAfter,
-  addDays, daysBetween,
+  addDays, daysBetween, callDateAfter,
 } from './schedule.js';
 import {
   monthKeyOf, shiftMonth, monthLabel, monthGrid, calendarDateOf, bucketByDate, undatedViews, countsOf, summarize,
@@ -12,6 +12,7 @@ import { buildBackup, backupFileName } from './backup.js';
 import {
   todayCalls, upcomingCalls, escalationCalls, visitCalls, activePrescriptionCount, preRunoutCall, awaitingShipment,
   callViews, unreachedRows, livePatients, trashRows, groupByKind, KIND_ORDER, pendingPlanOf,
+  visitCheckRows, latestPrescriptionOf,
 } from './model.js';
 import {
   CONDITION_LABELS, RESULT_LABELS, KIND_LABELS, CALL_STATUS_LABELS, DAYS_PRESETS, DEFAULT_SCRIPTS,
@@ -20,7 +21,7 @@ import {
   RELATION_PRESETS, patientLabel, addressName,
 } from './texts.js';
 
-const TABS = ['escalation', 'today', 'shipment', 'calendar', 'unreached', 'visit', 'all', 'scripts', 'admin'];
+const TABS = ['escalation', 'today', 'shipment', 'calendar', 'unreached', 'visit', 'visitcheck', 'all', 'scripts', 'admin'];
 
 export const state = {
   patients: [], allPatients: [], scripts: {}, tab: 'today', search: '', staff: null, detailPatientId: null,
@@ -123,7 +124,10 @@ export function conditionBadge(patient) {
 }
 
 export function kindBadge(call) {
-  return `<span class="badge badge-kind">${KIND_LABELS[call.kind]}</span>`;
+  // 재해피콜과 경과 확인 콜은 눈에 띄어야 한다는 접수실 의견 → 형광으로 보여준다.
+  const cls = call.kind === 'retry' ? 'badge-retry-hi'
+    : call.kind === 'followup' ? 'badge-followup' : 'badge-kind';
+  return `<span class="badge ${cls}">${KIND_LABELS[call.kind]}</span>`;
 }
 
 export function resultBadge(result) {
@@ -139,6 +143,7 @@ export function render() {
   const visits = visitCalls(state.patients);
   const shipments = awaitingShipment(state.patients, today);
   const unreached = unreachedRows(state.patients, today);
+  const visitChecks = visitCheckRows(state.patients, today);
   const trash = trashRows(state.allPatients);
 
   $('stat-escalation').textContent = escalations.length;
@@ -151,6 +156,7 @@ export function render() {
   $('tab-count-unreached').textContent = unreached.length;
   $('tab-count-admin').textContent = trash.length;
   $('tab-count-visit').textContent = visits.length;
+  $('tab-count-visitcheck').textContent = visitChecks.length;
   $('tab-count-all').textContent = state.patients.length;
 
   TABS.forEach((t) => { $(`panel-${t}`).hidden = t !== state.tab; });
@@ -162,6 +168,7 @@ export function render() {
   if (state.tab === 'calendar') renderCalendar(today);
   if (state.tab === 'unreached') renderUnreached(unreached);
   if (state.tab === 'visit') renderVisit(visits);
+  if (state.tab === 'visitcheck') renderVisitCheck(visitChecks, today);
   if (state.tab === 'all') renderAll();
   if (state.tab === 'scripts') renderScripts();
   if (state.tab === 'admin') renderAdmin(trash);
@@ -191,7 +198,7 @@ function callCard({ patient, prescription, call }, today) {
          <button class="btn btn-sm" data-action="edit-call" data-id="${call.id}">🗓 날짜 변경</button>`);
 
   return `
-    <div class="case-card">
+    <div class="case-card${call.kind === 'retry' ? ' retry-hi' : ''}">
       <div class="case-top">
         <div class="case-id">
           <div class="case-name">${esc(patientLabel(patient))}</div>
@@ -454,6 +461,38 @@ function renderVisit(list) {
     </div>`).join('') : '<div class="empty">내원 예약이 필요한 환자가 없어요.</div>';
 }
 
+// 예약했다고 표시한 환자가 실제로 왔는지 확인하는 목록.
+function renderVisitCheck(rows, today) {
+  if (rows.length === 0) {
+    $('panel-visitcheck').innerHTML = '<div class="empty">확인할 내원이 없어요. 통화에서 내원 예약을 표시하면 그 날짜에 여기 떠요.</div>';
+    return;
+  }
+  $('panel-visitcheck').innerHTML = rows.map(({ patient, prescription, call, checkOn, overdueDays: late }) => `
+    <div class="case-card${late > 0 ? ' retry-hi' : ''}">
+      <div class="case-top">
+        <div class="case-id">
+          <div class="case-name">${esc(patientLabel(patient))}</div>
+          <div class="case-meta-row">${conditionBadge(patient)}
+            <span class="badge badge-visit-check">내원 확인</span>
+            ${late > 0 ? `<span class="badge badge-overdue">${late}일 지남</span>` : '<span class="badge badge-today">오늘</span>'}
+            ${resultBadge(call.result)}</div>
+          <div class="case-phone mono">${esc(formatPhone(patient.phone))}</div>
+        </div>
+        <div class="case-due">
+          <div>통화일</div>
+          <div class="d">${call.doneAt ? localDate(call.doneAt) : formatKoreanDate(call.dueOn)}</div>
+          <div>확인 ${formatKoreanDate(checkOn)}</div>
+        </div>
+      </div>
+      <div class="case-note">${esc(call.note || '메모 없음')}</div>
+      <div class="case-actions">
+        <button class="btn btn-primary btn-sm" data-action="visit-came" data-id="${call.id}">✅ 내원했어요</button>
+        <button class="btn btn-sm" data-action="visit-not-yet" data-id="${call.id}">아직 안 왔어요 (1주일 뒤 다시)</button>
+        <button class="btn btn-ghost btn-sm" data-action="detail" data-id="${patient.id}">상세 · 이력</button>
+      </div>
+    </div>`).join('');
+}
+
 function renderAll() {
   const el = $('panel-all');
   if (!el.dataset.ready) {
@@ -651,6 +690,7 @@ export function openDetailModal(patient) {
       </div>
     </div>
     <div class="modal-footer">
+      <button class="btn btn-sm" data-action="followup" data-id="${patient.id}">🔔 경과 확인 콜 잡기</button>
       <button class="btn btn-danger btn-sm" data-action="trash-patient" data-id="${patient.id}">🗑 환자 지우기</button>
       <button class="btn" data-action="close">닫기</button>
     </div>`, true);
@@ -976,12 +1016,44 @@ export function openCallModal(view) {
       <span class="field-hint" id="cl-worse-hint" hidden>악화로 저장하면 '원장 전달 필요'에 올라가요.</span>
     </div>
     <div class="field"><label>통화 메모</label><textarea id="cl-note" placeholder="증상 경과, 특이사항"></textarea></div>
-    <div class="field"><label class="checkbox-row"><input type="checkbox" id="cl-visit"> 내원 예약이 필요해요</label></div>
+    <div class="field">
+      <label class="checkbox-row"><input type="checkbox" id="cl-retry"> 재해피콜 걸기 (약을 다 못 드셨을 때)</label>
+      <div id="cl-retry-box" hidden>
+        <div class="quick-row">
+          ${[['3일 뒤', 3], ['1주일 뒤', 7], ['2주일 뒤', 14]].map(([label, d]) =>
+            `<button type="button" class="btn btn-sm" data-quick="retry" data-days="${d}">${label}</button>`).join('')}
+        </div>
+        <input type="date" id="cl-retry-date" value="${callDateAfter(todayYMD(), 7)}">
+        <span class="field-hint" id="cl-retry-hint"></span>
+      </div>
+    </div>
+    <div class="field">
+      <label class="checkbox-row"><input type="checkbox" id="cl-visit"> 내원 예약이 필요해요</label>
+      <div id="cl-visit-box" hidden>
+        <div class="quick-row">
+          ${[['1주일 뒤', 7], ['2주일 뒤', 14]].map(([label, d]) =>
+            `<button type="button" class="btn btn-sm" data-quick="visit" data-days="${d}">${label}</button>`).join('')}
+        </div>
+        <input type="date" id="cl-visit-date" value="${callDateAfter(todayYMD(), 7)}">
+        <span class="field-hint">이 날짜에 '내원 확인' 탭에 떠요. 실제로 오셨는지 그때 확인합니다.</span>
+      </div>
+    </div>
     <div class="field"><label class="checkbox-row"><input type="checkbox" id="cl-close-early"> 이 처방 조기 마감 (복용 중단 등)</label></div>
     <div class="modal-footer">
       <button class="btn" data-action="close">취소</button>
       <button class="btn btn-primary" id="cl-submit">저장</button>
     </div>`, true);
+
+  const syncBoxes = () => {
+    $('cl-retry-box').hidden = !$('cl-retry').checked;
+    $('cl-visit-box').hidden = !$('cl-visit').checked;
+    const d = $('cl-retry-date').value;
+    $('cl-retry-hint').textContent = d
+      ? `${formatKoreanDate(d)}에 재해피콜로 떠요.`
+      : '날짜를 넣어주세요.';
+    $('cl-retry-hint').classList.toggle('warn', Boolean(d) && !isCallDay(d));
+    if (d && !isCallDay(d)) $('cl-retry-hint').textContent = '목·토·일에는 콜을 잡지 않아요.';
+  };
 
   $('cl-result').addEventListener('click', (e) => {
     const b = e.target.closest('.pill-opt');
@@ -990,7 +1062,18 @@ export function openCallModal(view) {
     selectPill('cl-result', result);
     $('cl-worse-hint').hidden = result !== 'worse';
     if (defaultVisitNeededFor(result)) $('cl-visit').checked = true;
+    syncBoxes();
   });
+
+  $('cl-retry').addEventListener('change', syncBoxes);
+  $('cl-visit').addEventListener('change', syncBoxes);
+  $('cl-retry-date').addEventListener('input', syncBoxes);
+  document.querySelectorAll('[data-quick]').forEach((b) => b.addEventListener('click', () => {
+    const date = callDateAfter(todayYMD(), Number(b.dataset.days));
+    $(b.dataset.quick === 'retry' ? 'cl-retry-date' : 'cl-visit-date').value = date;
+    syncBoxes();
+  }));
+  syncBoxes();
 
   $('cl-submit').addEventListener('click', async () => {
     const d = decideAnswered(call, {
@@ -999,11 +1082,20 @@ export function openCallModal(view) {
       visitNeeded: $('cl-visit').checked,
       closeEarly: $('cl-close-early').checked,
     });
+    const retryDueOn = $('cl-retry').checked ? $('cl-retry-date').value : null;
+    const visitCheckOn = $('cl-visit').checked ? $('cl-visit-date').value : null;
+    if ($('cl-retry').checked && (!retryDueOn || !isCallDay(retryDueOn))) {
+      toast('재해피콜 날짜는 월·화·수·금 중에서 골라주세요.');
+      return;
+    }
+    if ($('cl-visit').checked && !visitCheckOn) { toast('내원 확인 날짜를 넣어주세요.'); return; }
+    const extra = retryDueOn ? ` ${formatKoreanDate(retryDueOn)} 재해피콜도 잡았어요.` : '';
     const ok = await run(() => store.saveCallOutcome(call.id, {
       expectedStatus: call.status, outcome: 'answered', note: d.note, status: d.status, dueOn: null,
       noAnswerCount: call.noAnswerCount, result: d.result, visitNeeded: d.visitNeeded,
       escalation: d.escalation, closePrescription: d.closePrescription,
-    }), d.escalation === 'pending' ? "저장했어요. '원장 전달 필요'에 올라갔어요." : '저장했어요.');
+      retryDueOn, visitCheckOn,
+    }), (d.escalation === 'pending' ? "저장했어요. '원장 전달 필요'에 올라갔어요." : '저장했어요.') + extra);
     if (ok) closeModal();
   });
 }
@@ -1276,6 +1368,99 @@ function openEditCallModal({ patient, prescription, call }) {
   });
 }
 
+// 내원 예약으로 표시하면서 언제 확인할지 함께 정한다.
+function openVisitBookedModal(view) {
+  if (!view) return;
+  const { patient, call } = view;
+  const today = todayYMD();
+  openModal(`
+    <div class="modal-head">
+      <div><h2>내원 예약 표시 · ${esc(patientLabel(patient))}</h2>
+        <div class="sub">언제 내원했는지 확인할지 정해주세요.</div></div>
+      <button class="close-x" data-action="close">✕</button>
+    </div>
+    <div class="field">
+      <label>내원 확인 날짜</label>
+      <div class="quick-row">
+        ${[['1주일 뒤', 7], ['2주일 뒤', 14], ['한 달 뒤', 30]].map(([label, d]) =>
+          `<button type="button" class="btn btn-sm" data-days="${d}">${label}</button>`).join('')}
+      </div>
+      <input type="date" id="vb-date" value="${callDateAfter(today, 7)}">
+      <span class="field-hint">이 날짜에 '내원 확인' 탭에 떠요.</span>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" data-action="close">취소</button>
+      <button class="btn btn-primary" id="vb-submit">예약 완료로 표시</button>
+    </div>`);
+
+  document.querySelectorAll('[data-days]').forEach((b) => b.addEventListener('click', () => {
+    $('vb-date').value = callDateAfter(today, Number(b.dataset.days));
+  }));
+
+  $('vb-submit').addEventListener('click', async () => {
+    const checkOn = $('vb-date').value;
+    if (!checkOn) { toast('확인 날짜를 넣어주세요.'); return; }
+    const ok = await run(() => store.markVisitBooked(call.id, { checkOn }),
+      `예약 완료로 표시했어요. ${formatKoreanDate(checkOn)}에 '내원 확인'에 떠요.`);
+    if (ok) closeModal();
+  });
+}
+
+// 처방을 새로 넣지 않고 한두 달 뒤 경과를 묻는 콜을 잡는다.
+function openFollowupModal(patient) {
+  if (!patient) return;
+  const today = todayYMD();
+  const rx = latestPrescriptionOf(patient);
+  if (!rx) { toast('처방이 없어 경과 확인 콜을 만들 수 없어요.'); return; }
+  openModal(`
+    <div class="modal-head">
+      <div><h2>경과 확인 콜 · ${esc(patientLabel(patient))}</h2>
+        <div class="sub">약 발송 없이 날짜만 잡아요. 그날 '오늘 콜'에 뜹니다.</div></div>
+      <button class="close-x" data-action="close">✕</button>
+    </div>
+    <div class="field">
+      <label>언제 걸까요?</label>
+      <div class="quick-row">
+        ${[['2주일 뒤', 14], ['한 달 뒤', 30], ['두 달 뒤', 60], ['석 달 뒤', 90]].map(([label, d]) =>
+          `<button type="button" class="btn btn-sm" data-days="${d}">${label}</button>`).join('')}
+      </div>
+      <input type="date" id="fu-date" value="${callDateAfter(today, 30)}">
+      <span class="field-hint" id="fu-hint"></span>
+    </div>
+    <div class="field">
+      <label>거는 이유 *</label>
+      <input type="text" id="fu-reason" maxlength="200" placeholder="예: 치료 끝나고 한 달 뒤 재발 확인">
+    </div>
+    <div class="modal-footer">
+      <button class="btn" data-action="close">취소</button>
+      <button class="btn btn-primary" id="fu-submit">만들기</button>
+    </div>`, true);
+
+  const updateHint = () => {
+    const date = $('fu-date').value;
+    $('fu-hint').textContent = !date ? '날짜를 넣어주세요.'
+      : !isCallDay(date) ? '목·토·일에는 콜을 잡지 않아요.'
+      : `${formatKoreanDate(date)}에 경과 확인 콜로 떠요.`;
+    $('fu-hint').classList.toggle('warn', Boolean(date) && !isCallDay(date));
+  };
+  document.querySelectorAll('[data-days]').forEach((b) => b.addEventListener('click', () => {
+    $('fu-date').value = callDateAfter(today, Number(b.dataset.days));
+    updateHint();
+  }));
+  $('fu-date').addEventListener('input', updateHint);
+  updateHint();
+
+  $('fu-submit').addEventListener('click', async () => {
+    const dueOn = $('fu-date').value;
+    const reason = $('fu-reason').value.trim();
+    if (!dueOn || !isCallDay(dueOn)) { toast('월·화·수·금 중에서 골라주세요.'); return; }
+    if (!reason) { toast('거는 이유를 적어주세요.'); return; }
+    const ok = await run(() => store.createFollowupCall(patient.id, { dueOn, reason }),
+      `${formatKoreanDate(dueOn)}에 경과 확인 콜을 잡았어요.`);
+    if (ok) closeModal();
+  });
+}
+
 function openRetryModal(patient, prescription) {
   const today = todayYMD();
   const first = isCallDay(today) ? today : nextCallDayAfter(today);
@@ -1442,7 +1627,14 @@ export function onAppClick(e) {
     }
   }
   if (action === 'escalate') openEscalationModal(findView(id));
-  if (action === 'visit-booked') run(() => store.markVisitBooked(id), '예약 완료로 표시했어요.');
+  if (action === 'visit-booked') openVisitBookedModal(findView(id));
+  if (action === 'visit-came') run(() => store.confirmVisit(id, { result: 'visited' }), '내원 확인했어요.');
+  if (action === 'visit-not-yet') {
+    const nextCheckOn = callDateAfter(todayYMD(), 7);
+    run(() => store.confirmVisit(id, { result: 'no_show', nextCheckOn }),
+      `${formatKoreanDate(nextCheckOn)}에 다시 확인하도록 미뤘어요.`);
+  }
+  if (action === 'followup') openFollowupModal(findPatient(id));
   if (action === 'save-script') run(() => store.saveScript(id, $(`script-${id}`).value), '스크립트를 저장했어요.');
   if (action === 'save-condition') {
     const patient = findPatient(id);

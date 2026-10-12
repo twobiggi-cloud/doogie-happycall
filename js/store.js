@@ -44,7 +44,7 @@ const PATIENT_SELECT = `
     id, prescribed_on, shipped_on, days, runout_on, status, closed_reason, created_at, deleted_at,
     calls (
       id, kind, due_on, status, no_answer_count, result, note, visit_needed, visit_booked,
-      escalation, escalated_at, done_at,
+      escalation, escalated_at, done_at, visit_check_on, visit_confirmed_at, visit_result,
       call_attempts ( id, attempted_at, outcome, note, staff_name )
     )
   )`;
@@ -207,6 +207,28 @@ export async function saveCallOutcome(callId, o) {
     p_visit_needed: o.visitNeeded,
     p_escalation: o.escalation,
     p_close_prescription: o.closePrescription ?? null,
+    p_retry_due_on: o.retryDueOn ?? null,
+    p_visit_check_on: o.visitCheckOn ?? null,
+  });
+  check(error);
+}
+
+// 처방을 새로 넣지 않고 한두 달 뒤 경과를 묻는 콜을 만든다.
+export async function createFollowupCall(patientId, { dueOn, reason }) {
+  const { error } = await supabase.rpc('create_followup_call', {
+    p_patient_id: patientId,
+    p_due_on: dueOn,
+    p_reason: reason,
+  });
+  check(error);
+}
+
+// 내원했는지 확인한다. 아직이면 다음 확인 날짜로 미룬다.
+export async function confirmVisit(callId, { result, nextCheckOn }) {
+  const { error } = await supabase.rpc('confirm_visit', {
+    p_call_id: callId,
+    p_result: result,
+    p_next_check_on: nextCheckOn ?? null,
   });
   check(error);
 }
@@ -215,6 +237,7 @@ export async function saveCallOutcome(callId, o) {
 const CONFLICT_MESSAGES = [
   '콜 상태가 바뀌었습니다', '발송일이 이미 입력됐습니다', '처방이 이미 바뀌었습니다', '재시도 콜이 이미 있습니다',
   '이미 처리됐습니다', '메모가 이미 바뀌었습니다', '증상이 이미 바뀌었습니다',
+  '같은 날짜의 경과 확인 콜이 이미 있습니다',
 ];
 
 // 고치기 전에 보고 있던 증상을 함께 보낸다. 그 사이 남이 고쳤으면 저장이 막힌다.
@@ -255,15 +278,12 @@ export async function markEscalationSent(callId) {
   if (!data || data.length === 0) throw new Error('콜 상태가 바뀌었습니다');
 }
 
-export async function markVisitBooked(callId) {
-  const { data, error } = await supabase
-    .from('calls')
-    .update({ visit_booked: true })
-    .eq('id', callId)
-    .eq('visit_booked', false)
-    .select('id');
+export async function markVisitBooked(callId, { checkOn }) {
+  const { error } = await supabase.rpc('mark_visit_booked', {
+    p_call_id: callId,
+    p_check_on: checkOn,
+  });
   check(error);
-  if (!data || data.length === 0) throw new Error('콜 상태가 바뀌었습니다');
 }
 
 export async function saveScript(key, text) {
