@@ -94,8 +94,12 @@ export function escalationCalls(patients) {
   return callViews(patients).filter((v) => v.call.escalation === 'pending').sort(byDueDate);
 }
 
+// 내원이 필요하다고 했지만 아직 '언제 확인할지'를 정하지 않은 콜.
+// 확인 날짜를 잡으면 내원 확인 목록으로 넘어가므로 여기서는 빠진다.
 export function visitCalls(patients) {
-  return callViews(patients).filter((v) => v.call.visitNeeded && !v.call.visitBooked).sort(byDueDate);
+  return callViews(patients)
+    .filter((v) => v.call.visitNeeded && !v.call.visitBooked && !v.call.visitCheckOn)
+    .sort(byDueDate);
 }
 
 export function preRunoutCall(prescription) {
@@ -204,7 +208,8 @@ export function pendingPlanOf(prescription) {
 export function visitCheckRows(patients, today) {
   const rows = [];
   for (const { patient, prescription, call } of callViews(patients)) {
-    if (!call.visitBooked || !call.visitCheckOn || call.visitConfirmedAt) continue;
+    // 통화 기록 창에서 확인 날짜만 잡아도 목록에 떠야 한다(예약 완료 표시를 따로 누르지 않는다).
+    if (!call.visitCheckOn || call.visitConfirmedAt) continue;
     if (call.visitCheckOn > today) continue;
     rows.push({
       patient,
@@ -223,4 +228,13 @@ export function latestPrescriptionOf(patient) {
   const live = (patient.prescriptions ?? []).filter((r) => !r.deletedAt);
   if (live.length === 0) return null;
   return live.slice().sort((a, b) => (a.prescribedOn < b.prescribedOn ? 1 : -1))[0];
+}
+
+// 앞으로 확인할 내원. 아직 날짜가 오지 않아 할 일은 아니지만, 예정이 보여야 '왜 비었지' 하지 않는다.
+export function upcomingVisitChecks(patients, today) {
+  return callViews(patients)
+    .filter(({ call }) => call.visitCheckOn && !call.visitConfirmedAt && call.visitCheckOn > today)
+    .map(({ patient, prescription, call }) => ({ patient, prescription, call, checkOn: call.visitCheckOn }))
+    .sort((a, b) => (a.checkOn < b.checkOn ? -1 : a.checkOn > b.checkOn ? 1
+      : a.patient.name.localeCompare(b.patient.name, 'ko')));
 }

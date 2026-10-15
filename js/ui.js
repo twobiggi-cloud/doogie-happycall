@@ -12,7 +12,7 @@ import { buildBackup, backupFileName } from './backup.js';
 import {
   todayCalls, upcomingCalls, escalationCalls, visitCalls, activePrescriptionCount, preRunoutCall, awaitingShipment,
   callViews, unreachedRows, livePatients, trashRows, groupByKind, KIND_ORDER, pendingPlanOf,
-  visitCheckRows, latestPrescriptionOf,
+  visitCheckRows, upcomingVisitChecks, latestPrescriptionOf,
 } from './model.js';
 import {
   CONDITION_LABELS, RESULT_LABELS, KIND_LABELS, CALL_STATUS_LABELS, DAYS_PRESETS, DEFAULT_SCRIPTS,
@@ -168,7 +168,7 @@ export function render() {
   if (state.tab === 'calendar') renderCalendar(today);
   if (state.tab === 'unreached') renderUnreached(unreached);
   if (state.tab === 'visit') renderVisit(visits);
-  if (state.tab === 'visitcheck') renderVisitCheck(visitChecks, today);
+  if (state.tab === 'visitcheck') renderVisitCheck(visitChecks, upcomingVisitChecks(state.patients, today), today);
   if (state.tab === 'all') renderAll();
   if (state.tab === 'scripts') renderScripts();
   if (state.tab === 'admin') renderAdmin(trash);
@@ -395,7 +395,10 @@ function renderCalendarDay(buckets, rxBuckets, today) {
   const list = (buckets.get(date) ?? []).slice().sort((a, b) => a.patient.name.localeCompare(b.patient.name, 'ko'));
   const c = countsOf(list);
   const head = `
-    <div class="section-title">${formatKoreanDate(date)} 해피콜</div>
+    <div class="cal-day-head">
+      <div class="section-title">${formatKoreanDate(date)} 해피콜</div>
+      <button class="btn btn-sm" data-action="followup-on" data-id="${date}">＋ 경과 상담 추가</button>
+    </div>
     <div class="cal-summary">
       <span class="cal-chip">대상<b>${c.total}</b></span>
       <span class="cal-chip">완료<b>${c.done}</b></span>
@@ -458,13 +461,21 @@ function renderVisit(list) {
         <button class="btn btn-primary btn-sm" data-action="visit-booked" data-id="${call.id}">✅ 예약 완료로 표시</button>
         <button class="btn btn-ghost btn-sm" data-action="detail" data-id="${patient.id}">상세 · 이력</button>
       </div>
-    </div>`).join('') : '<div class="empty">내원 예약이 필요한 환자가 없어요.</div>';
+    </div>`).join('') : "<div class=\"empty\">내원 예약이 필요한 환자가 없어요. 통화에서 확인 날짜까지 정한 환자는 '내원 확인' 탭에 있어요.</div>";
 }
 
 // 예약했다고 표시한 환자가 실제로 왔는지 확인하는 목록.
-function renderVisitCheck(rows, today) {
+function renderVisitCheck(rows, upcoming, today) {
+  const later = upcoming.length === 0 ? '' : `
+    <h3 class="section-title">앞으로 확인할 내원 <span class="sub-note">${upcoming.length}명</span></h3>
+    ${upcoming.map(({ patient, call, checkOn }) => `
+      <div class="upcoming-row">
+        <span>${esc(patientLabel(patient))} ${conditionBadge(patient)}
+          ${call.visitBooked ? '<span class="badge badge-visit-check">예약함</span>' : ''}</span>
+        <span class="mono">${formatKoreanDate(checkOn)} 확인</span>
+      </div>`).join('')}`;
   if (rows.length === 0) {
-    $('panel-visitcheck').innerHTML = '<div class="empty">확인할 내원이 없어요. 통화에서 내원 예약을 표시하면 그 날짜에 여기 떠요.</div>';
+    $('panel-visitcheck').innerHTML = `<div class="empty">오늘 확인할 내원이 없어요. 통화에서 '내원 예약이 필요해요'를 체크하고 확인 날짜를 정하면 그날 여기 떠요.</div>${later}`;
     return;
   }
   $('panel-visitcheck').innerHTML = rows.map(({ patient, prescription, call, checkOn, overdueDays: late }) => `
@@ -490,7 +501,7 @@ function renderVisitCheck(rows, today) {
         <button class="btn btn-sm" data-action="visit-not-yet" data-id="${call.id}">아직 안 왔어요 (1주일 뒤 다시)</button>
         <button class="btn btn-ghost btn-sm" data-action="detail" data-id="${patient.id}">상세 · 이력</button>
       </div>
-    </div>`).join('');
+    </div>`).join('') + later;
 }
 
 function renderAll() {
@@ -1406,6 +1417,69 @@ function openVisitBookedModal(view) {
   });
 }
 
+// 달력에서 날짜를 고른 뒤 환자를 찾아 그날 경과 상담을 넣는다.
+function openFollowupOnDateModal(dueOn) {
+  let picked = null;
+  openModal(`
+    <div class="modal-head">
+      <div><h2>경과 상담 추가 · ${formatKoreanDate(dueOn)}</h2>
+        <div class="sub">처방과 약 발송 없이 이 날짜에 전화할 환자를 넣어요.</div></div>
+      <button class="close-x" data-action="close">✕</button>
+    </div>
+    ${isCallDay(dueOn) ? '' : '<div class="preview-box warn">목·토·일이에요. 이 날짜에는 콜을 잡지 않아요.</div>'}
+    <div class="field">
+      <label>환자 찾기 *</label>
+      <input type="text" id="fd-search" placeholder="이름 또는 전화번호">
+      <div class="fam-list" id="fd-list"></div>
+    </div>
+    <div class="field">
+      <label>거는 이유 *</label>
+      <input type="text" id="fd-reason" maxlength="200" placeholder="예: 치료 종료 후 두 달 경과 상담">
+    </div>
+    <div class="modal-footer">
+      <button class="btn" data-action="close">취소</button>
+      <button class="btn btn-primary" id="fd-submit">추가</button>
+    </div>`);
+
+  const renderList = () => {
+    const q = $('fd-search').value.trim();
+    const digits = normalizePhone(q);
+    const found = q
+      ? state.patients.filter((p) => p.name.includes(q) || (digits && p.phone.includes(digits))).slice(0, 8)
+      : [];
+    if (found.length === 0) {
+      $('fd-list').innerHTML = q
+        ? '<div class="field-hint">찾는 환자가 없어요. 이름이나 번호를 다시 확인해주세요.</div>'
+        : '<div class="field-hint">이름이나 전화번호를 넣으면 환자가 보여요.</div>';
+      return;
+    }
+    $('fd-list').innerHTML = found.map((p) => `
+      <button type="button" class="fam-opt${picked && picked.id === p.id ? ' selected' : ''}" data-pick="${p.id}">
+        <span class="who">${esc(patientLabel(p))}</span>
+        <span class="what">${esc(formatPhone(p.phone))} · ${esc(conditionText(p.condition, p.conditionLabel))}</span>
+      </button>`).join('');
+  };
+
+  $('fd-search').addEventListener('input', () => { picked = null; renderList(); });
+  $('fd-list').addEventListener('click', (e) => {
+    const b = e.target.closest('.fam-opt');
+    if (!b) return;
+    picked = state.patients.find((p) => p.id === b.dataset.pick) ?? null;
+    renderList();
+  });
+  renderList();
+
+  $('fd-submit').addEventListener('click', async () => {
+    const reason = $('fd-reason').value.trim();
+    if (!isCallDay(dueOn)) { toast('목·토·일에는 콜을 잡지 않아요. 다른 날짜를 골라주세요.'); return; }
+    if (!picked) { toast('환자를 골라주세요.'); return; }
+    if (!reason) { toast('거는 이유를 적어주세요.'); return; }
+    const ok = await run(() => store.createFollowupCall(picked.id, { dueOn, reason }),
+      `${patientLabel(picked)} 님 경과 상담을 ${formatKoreanDate(dueOn)}에 넣었어요.`);
+    if (ok) closeModal();
+  });
+}
+
 // 처방을 새로 넣지 않고 한두 달 뒤 경과를 묻는 콜을 잡는다.
 function openFollowupModal(patient) {
   if (!patient) return;
@@ -1635,6 +1709,7 @@ export function onAppClick(e) {
       `${formatKoreanDate(nextCheckOn)}에 다시 확인하도록 미뤘어요.`);
   }
   if (action === 'followup') openFollowupModal(findPatient(id));
+  if (action === 'followup-on') openFollowupOnDateModal(id);
   if (action === 'save-script') run(() => store.saveScript(id, $(`script-${id}`).value), '스크립트를 저장했어요.');
   if (action === 'save-condition') {
     const patient = findPatient(id);

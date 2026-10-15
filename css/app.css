@@ -276,3 +276,5 @@
 .badge-retry-hi{background:#fff3b0; color:#8a6100; font-weight:800; box-shadow:0 0 0 1px #f2d35a inset;}
 .badge-followup{background:#e6f0ff; color:#1d4ed8; font-weight:700;}
 .case-card.retry-hi{border-left:4px solid #f0c417; background:linear-gradient(90deg, #fffbe6 0%, var(--surface) 38%);}
+.cal-day-head{display:flex; align-items:center; justify-content:space-between; gap:10px;}
+.cal-day-head .section-title{margin-bottom:8px;}

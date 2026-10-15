@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   toPatient, callViews, todayCalls, upcomingCalls, escalationCalls, visitCalls,
-  groupByKind, pendingPlanOf, visitCheckRows, latestPrescriptionOf,
+  groupByKind, pendingPlanOf, visitCheckRows, upcomingVisitChecks, latestPrescriptionOf,
   preRunoutCall, activePrescriptionCount, awaitingShipment, unreachedRows, livePatients, trashRows,
 } from '../js/model.js';
 
@@ -252,20 +252,43 @@ const visitPatient = (id, name, call) => ({
   }],
 });
 
-test('내원 확인 목록은 예약한 콜 중 확인 날짜가 오늘까지인 것만, 이른 날짜 먼저', () => {
+test('내원 확인 목록은 확인 날짜가 오늘까지인 것만, 이른 날짜 먼저', () => {
   const patients = [
     visitPatient('p1', '가환자', { visitCheckOn: '2026-10-19' }),
     visitPatient('p2', '나환자', { visitCheckOn: '2026-10-16' }),
     visitPatient('p3', '다환자', { visitCheckOn: '2026-10-26' }),          // 아직 확인할 날이 아님
     visitPatient('p4', '라환자', { visitCheckOn: '2026-10-15', visitConfirmedAt: '2026-10-15T01:00:00Z', visitResult: 'visited' }), // 이미 확인함
     visitPatient('p5', '마환자', { visitCheckOn: null }),                   // 확인 날짜 없음
-    visitPatient('p6', '바환자', { visitBooked: false, visitCheckOn: '2026-10-13' }), // 아직 예약 전
   ];
   const rows = visitCheckRows(patients, '2026-10-19');
   assert.deepEqual(rows.map((r) => r.patient.name), ['나환자', '가환자']);
   assert.equal(rows[0].checkOn, '2026-10-16');
   assert.equal(rows[0].overdueDays, 3);
   assert.equal(rows[1].overdueDays, 0);
+});
+
+test('통화에서 확인 날짜만 잡아도(예약 완료 표시 전) 그날 내원 확인에 뜬다', () => {
+  // 실제로 접수실이 쓰는 길: 통화 기록 창에서 '내원 예약이 필요해요' + 확인 날짜
+  const patients = [visitPatient('p1', '가환자', { visitBooked: false, visitCheckOn: '2026-10-19' })];
+  assert.deepEqual(visitCheckRows(patients, '2026-10-19').map((r) => r.patient.name), ['가환자']);
+});
+
+test('확인 날짜를 잡은 콜은 내원 예약 필요 목록에서 빠진다', () => {
+  const booked = visitPatient('p1', '가환자', { visitBooked: false, visitCheckOn: '2026-10-19' });
+  const noDate = visitPatient('p2', '나환자', { visitBooked: false, visitCheckOn: null });
+  assert.deepEqual(visitCalls([booked, noDate]).map((v) => v.patient.name), ['나환자']);
+});
+
+test('앞으로 확인할 내원은 따로 모아 이른 날짜부터 보여준다', () => {
+  const patients = [
+    visitPatient('p1', '가환자', { visitCheckOn: '2026-10-26' }),
+    visitPatient('p2', '나환자', { visitCheckOn: '2026-10-21' }),
+    visitPatient('p3', '다환자', { visitCheckOn: '2026-10-19' }),          // 오늘 → 예정이 아니라 확인 대상
+    visitPatient('p4', '라환자', { visitCheckOn: '2026-10-23', visitConfirmedAt: '2026-10-19T01:00:00Z' }),
+  ];
+  const rows = upcomingVisitChecks(patients, '2026-10-19');
+  assert.deepEqual(rows.map((r) => r.patient.name), ['나환자', '가환자']);
+  assert.equal(rows[0].checkOn, '2026-10-21');
 });
 
 test('가장 최근 처방은 처방일이 늦은 것, 없으면 null', () => {
